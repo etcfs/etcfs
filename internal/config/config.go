@@ -194,7 +194,10 @@ func Parse() *Config {
 	var leaseTTL string
 	var flushInterval string
 	var entryTimeout, attrTimeout string
+	var configFile string
 
+	flag.StringVar(&configFile, "config", DefaultConfigFile,
+		"YAML configuration file; every flag below can be set in it, or in the environment as ETCFS_<FLAG>, with the command line winning over both")
 	flag.StringVar(&cfg.NotifyAddr, "notify-socket", DefaultNotifySocket,
 		"Unix socket the C daemon connects to for cache-invalidation notifications")
 	flag.StringVar(&cfg.ListenAddr, "listen", DefaultSocket,
@@ -256,6 +259,11 @@ func Parse() *Config {
 		"Reject every mutating FUSE operation with EROFS; for backup/inspection mounts and running fsck against a live volume")
 
 	flag.Parse()
+
+	if err := layer(flag.CommandLine, configFile); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 
 	cfg.EtcdEndpoints = strings.Split(etcdEndpoints, ",")
 

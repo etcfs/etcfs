@@ -89,8 +89,17 @@ test-conformance:
 
 lint: lint-go lint-c lint-sh
 
+# Pinning the version of golangci-lint is not enough on its own: it also has to
+# run under the Go go.mod targets.  The linter typechecks against the export
+# data of whichever toolchain is on PATH, and a release built for an older Go
+# cannot read a newer one's — so a machine with a newer Go installed reports
+# every package as broken ("undefined: yaml", "l.Error undefined") while the
+# build, the tests and CI are all clean.  GOTOOLCHAIN fetches the pinned
+# version on demand and leaves the rest of the machine alone.
+GO_TOOLCHAIN := go$(shell awk '/^go [0-9]/{print $$2; exit}' go.mod)
+
 lint-go:
-	golangci-lint run ./...
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) golangci-lint run ./...
 
 lint-c:
 	clang-format --dry-run --Werror $(C_SRCS) $(C_HDRS) $(C_TEST_SRC)

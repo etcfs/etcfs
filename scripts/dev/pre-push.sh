@@ -62,7 +62,13 @@ if [[ "$installed_lint" != "$pinned_lint" ]]; then
     echo "    go install github.com/golangci/golangci-lint/cmd/golangci-lint@${pinned_lint}"
     echo ""
 else
-    run_check "golangci-lint ${pinned_lint}" golangci-lint run --timeout=5m ./...
+    # And it must run under the Go go.mod targets, for the same reason: the
+    # linter typechecks against the export data of whichever toolchain is on
+    # PATH, and a release built for an older Go cannot read a newer one's, so a
+    # newer Go here reports every package as broken while CI is clean.
+    pinned_go="go$(awk '/^go [0-9]/{print $2; exit}' go.mod)"
+    run_check "golangci-lint ${pinned_lint}" \
+        env GOTOOLCHAIN="$pinned_go" golangci-lint run --timeout=5m ./...
 fi
 run_check "C build"   make -C cmd/etcfuse
 run_check "C test"    make test-c
