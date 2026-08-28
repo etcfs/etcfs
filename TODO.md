@@ -8,16 +8,20 @@ EtcFS wins and loses.
 
 ## Next steps, ranked
 
-**1. Decide whether mode and ownership belong under the inode lock.** `getattr`
-costs ~1.5 ms per file reading etcd for a record the lock's own snapshot already
-holds, and it cannot use that snapshot today: `setattr` changes mode and
-ownership under a bare compare-and-set and takes no lock, so a peer can rewrite
-those fields of an inode this node holds exclusively. Bringing them under the
-lock would make the snapshot authoritative for the whole record — and would make
-a `chmod` on a file another node holds force a handover. That is a change to how
-`chmod` behaves cluster-wide, not an optimisation, and it is the prerequisite
-for the `getattr` saving rather than a separate idea. `getxattr` (~1.5 ms more)
-needs the same question answered for xattr keys.
+**1. Account for `open`.** An `open`+`read` of six bytes costs 208 us against
+ext4's 14.8, while a cached `stat` is 3.6 us against 3.6 and a negative lookup
+4.0 against 4.7 — the caches are doing their job, and this one is not explained
+by them. It is also 25x too fast to be a Raft commit, so the cost is per-open
+work in the daemon or the lock path, on every read.
+
+**2. Put security tooling in CI.** There is none: no `govulncheck`, `gosec`,
+CodeQL, Trivy, SBOM, Dependabot or Scorecard anywhere in `.github/`. Ranked by
+value for a root-running FUSE daemon: ASan/UBSan builds of the existing C tests;
+a libFuzzer target for the C request path, which the system-level chaos fuzzers
+do not cover for memory safety; `govulncheck`; pinning Actions to SHAs rather
+than the mutable tags the release pipeline currently trusts to publish binaries,
+packages, containers and the Helm chart; signing releases and attaching
+provenance.
 
 ## Pending benchmark work
 
@@ -30,12 +34,112 @@ needs the same question answered for xattr keys.
       it. Too small to reach ENOSPC and too large to call zero; separating a
       smaller leak from the scrubber's cadence needs allocator-level free-block
       accounting rather than `df`.
+- [ ] **Real-application benchmarks.** Every report today is synthetic (fio,
+      untar, `du`) or head-to-head against another filesystem; none answers what
+      happens when an ordinary application runs on the mount. A Gollum wiki
+      backed by a git repository on the shared volume, measured against the same
+      stack on local ext4 on the same node, gave read-path parity across the
+      board (125 vs 102 ms to render an 8 KB page; 4041 vs 3979 ms for a
+      whole-repo log; a 38 KB page marginally faster on EtcFS) and 412 vs 25 ms
+      to commit an edit. Read parity under a real application is a stronger
+      claim than any fio number and is currently made nowhere; the write row
+      belongs beside it, since git turns a 2 KB edit into ~25 namespace
+      mutations and is close to worst-case for this architecture. Caveats to fix
+      in a real harness: single-run medians, one instance type, and an ext4
+      control on the gp3 root volume against io2 for EtcFS. Candidates beyond
+      git: SQLite, a build cache, a Prometheus TSDB.
 - [ ] **GFS2's takeover under fencing.** With `fence_aws` confirmed at ~10 s the
       survivors keep serving, but the dead node's inode was still not recovered
       inside 180 s. Needs `dlm_tool ls` and the recovery journal inspected while
       it is happening to say whether a step is missing from the setup or that is
       GFS2's own behaviour.
 
+
+# Big Extensions or Impactful changes
+
+Changes that reach past one handler — a cluster-wide semantic, a formal
+artifact, or a headline benchmark property.
+
+**Mode and ownership under the inode lock.** `getattr` costs ~1.5 ms per file
+reading etcd for a record the lock's own snapshot already holds, and it cannot
+use that snapshot today: `setattr` changes mode and ownership under a bare
+compare-and-set and takes no lock (`internal/ipc/handlers.go:871`), so a peer
+can rewrite those fields of an inode this node holds exclusively. Bringing them
+under the lock makes the snapshot authoritative and makes a `chmod` on a file
+another node holds force a handover — a change to how `chmod` behaves
+cluster-wide, not an optimisation. `getxattr` (~1.5 ms more) is a separate
+problem, not the same one twice: `xattr:` is its own prefix and is watched by
+nothing, so caching it needs a new watch as well as lock coverage of the
+unlocked `setxattr`.
+
+Three findings from reading the paths, none of them reproduced yet:
+
+- *There is a correctness hole underneath the performance question.*
+  `inodeChanged` (`internal/ipc/notify.go:277`) skips the kernel attribute
+  invalidation for any inode this node holds a lock key on, on the grounds that
+  a held inode "cannot have been written by a peer". True for size and extents;
+  false for mode, ownership and nlink. With `default_permissions`
+  (`pkg/fuse/fuse.c:572`) and a 60 s attribute timeout, a peer's `chmod` can go
+  unseen on a holding node for up to that timeout — `getattr` reading etcd does
+  not save it, because the kernel does not call `getattr` while its cached
+  attributes are valid. Bringing mode under the lock closes this as a side
+  effect, which makes the item a correctness fix that unlocks an optimisation
+  rather than an optimisation with a semantic cost. Needs a two-node test
+  before anyone acts on it.
+- *Scope is wider than mode and ownership.* `nlink` is written unlocked too, by
+  `link`/`unlink`/`rename` (`pkg/metadata/dirent.go:255,351,444,738`). A
+  snapshot authoritative for mode but stale on nlink still cannot answer
+  `getattr`, and locking the namespace path aims straight at the lock-free
+  namespace property the 2→6 node metadata sweep is built on.
+- *The formal artifacts point opposite ways.* `CachedLock.tla`'s `Write` action
+  already requires `Holds(n)` and `NoPublishWithoutLock` asserts no non-holder
+  publishes — so the spec already models the world this item would create, and
+  the code is the divergence. What it needs is a stated field mapping. The
+  alternative design (holders drop their snapshot on a peer's write, keeping
+  `chmod` lock-free) is cheaper at runtime but needs a new spec action and
+  weakens `ViewMatchesTruth` to an eventual property. Either way Porcupine
+  covers nothing here: no model touches mode, ownership or nlink, and
+  `namespace.go:46` accepts EACCES without constraining state.
+
+**`FUSE_CAP_WRITEBACK_CACHE`.** `fuse.c:486-495` takes `READDIRPLUS`,
+`ASYNC_READ` and `AUTO_INVAL_DATA` and deliberately leaves writeback out, so the
+kernel cannot coalesce small buffered writes and each one is its own round trip.
+Measured writing 64 MiB: 2 MiB/s at 4 KiB, 3 at 8 KiB, 12 at 32 KiB, 45 at
+128 KiB, 126 at 1 MiB, against ext4's 891 MiB/s at 4 KiB. Any application
+writing in small buffered chunks — git, SQLite, log writers, `tar` — lands at
+the bottom of that curve without knowing block size was a performance decision.
+`ops.c:653` states the write-through property is intentional; this is a question
+about that decision, not a bug report against it.
+
+Findings from reading the paths, none of them reproduced yet:
+
+- *Write-through is load-bearing, not incidental.* It is what makes the kernel
+  hold only clean pages, so yielding an inode is `invalidatePages`
+  (`internal/ipc/notify.go:344`) — a drop. Under writeback the kernel holds
+  dirty pages the daemon has never seen, and dropping those on a handover is a
+  lost acknowledged write. The recall path would have to write them back before
+  invalidating, lengthening a path that already waits out `minHoldTime` and a
+  flush.
+- *It puts an unpublished buffer outside the daemon's control.* Today an ack
+  means the daemon holds the bytes (`pending`, `delegate.go`), and a self-fence
+  loses only what that buffer records. Under writeback the app is acked by the
+  kernel and the bytes may never reach the daemon at all, so a fenced node loses
+  writes the whole design currently accounts for. The kernel also takes over
+  `st_size` and mtime for an open file, against `withPending`/`pendingSize`
+  (`handlers.go:107`) patching size from the daemon's own buffer — two owners of
+  one field, with peers reading a third copy from etcd. `direct_io` is a third
+  collision: `ops.c:655` sets it whenever the backend refuses page caching, and
+  writeback does not combine with it.
+- *Both formal artifacts need work, and the checker fails silently without it.*
+  `CachedLock.tla` models the kernel's pages as a boolean `pages[n]` — clean
+  only — so writeback needs a dirty-page variable representing a second
+  unpublished buffer beside `buf`, `NoLostAckedWrite` extended to cover it, and
+  a broken variant in the shape of the existing `RecallFlushes FALSE`. On the
+  Porcupine side `test/verify/pagecache.go` asserts every yield was preceded by
+  an invalidation; under writeback the obligation becomes "write back, then
+  invalidate", and until the checker learns the new event it keeps passing while
+  data is lost. No chaos scenario writes small buffered chunks and then kills
+  the node.
 
 # Future Extensions
 
@@ -54,7 +158,13 @@ hard part with backup, so the two are one project rather than two.
 `SETLK` always succeeds and `GETLK` always reports the range free, so an
 application coordinating through file locks silently gets nothing. `SETLKW`
 needs blocking semantics against a lease, which is the design cost. Unrelated to
-the per-inode lease lock the data path uses, which works.
+the per-inode lease lock the data path uses, which works. Worth promoting on
+severity rather than effort: the showcase wiki is safe across nodes only because
+git coordinates through `O_CREAT|O_EXCL` and `rename`, both of which are
+enforced; an application using `flock` for the same job gets no exclusion at all
+and no indication of it. Until the handlers exist, a loud log line on first
+`SETLK`, or a mount option returning `ENOTSUP` instead of success, would stop
+that failing silently.
 
 **A production caller for arena rebalancing. Small; contained.** The mechanism
 exists and nothing invokes it, so an imbalanced cluster has no remedy.
