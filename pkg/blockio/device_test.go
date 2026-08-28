@@ -168,3 +168,38 @@ func TestRefreshSizePicksUpGrowth(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(8192), size)
 }
+
+// A failing device operation must come back as an error, not as a panic. The
+// byte counter is a Prometheus counter, which panics rather than go backwards,
+// and a failed pread/pwrite returns -1 — so a device that starts erroring
+// (a volume detached under a fenced node, say) used to take the IPC handler
+// down with it instead of returning EIO.
+func TestFailedIODoesNotPanicTheByteCounter(t *testing.T) {
+	f, err := os.CreateTemp("", "blockio-test-*")
+	require.NoError(t, err)
+	name := f.Name()
+	f.Close()
+	defer os.Remove(name)
+	require.NoError(t, os.Truncate(name, 4096*10))
+
+	dev, err := OpenBuffered(name)
+	require.NoError(t, err)
+
+	buf, err := AlignedBuffer(dev.SectorSize(), dev.SectorSize())
+	require.NoError(t, err)
+	defer func() { _ = FreeBuffer(buf) }()
+
+	// Closing the device makes every subsequent syscall fail on a bad fd,
+	// which is the -1 the counter used to be handed.
+	require.NoError(t, dev.Close())
+
+	require.NotPanics(t, func() {
+		n, err := dev.WriteAt(buf, 0)
+		require.Error(t, err)
+		require.LessOrEqual(t, n, 0)
+
+		n, err = dev.ReadAt(buf, 0)
+		require.Error(t, err)
+		require.LessOrEqual(t, n, 0)
+	})
+}

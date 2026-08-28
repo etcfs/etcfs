@@ -153,7 +153,12 @@ func (d *Device) ReadAt(buf []byte, offset int64) (int, error) {
 	}
 	n, err := unix.Pread(d.fd, buf, offset)
 	metrics.BlockIO.WithLabelValues("read").Inc()
-	metrics.BlockIOBytes.WithLabelValues("read").Add(float64(n))
+	// A failed pread returns -1, and a Prometheus counter panics rather than
+	// go backwards — so counting it unconditionally turns every device error
+	// into a panic in the handler that was going to return EIO cleanly.
+	if n > 0 {
+		metrics.BlockIOBytes.WithLabelValues("read").Add(float64(n))
+	}
 	return n, err
 }
 
@@ -166,7 +171,10 @@ func (d *Device) WriteAt(buf []byte, offset int64) (int, error) {
 	}
 	n, err := unix.Pwrite(d.fd, buf, offset)
 	metrics.BlockIO.WithLabelValues("write").Inc()
-	metrics.BlockIOBytes.WithLabelValues("write").Add(float64(n))
+	// See ReadAt: -1 from a failed pwrite would panic the counter.
+	if n > 0 {
+		metrics.BlockIOBytes.WithLabelValues("write").Add(float64(n))
+	}
 	return n, err
 }
 
