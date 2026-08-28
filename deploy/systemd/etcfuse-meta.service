@@ -6,10 +6,14 @@ Documentation=https://github.com/anomalyco/etcfuse
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/etcfuse-meta \
-  --listen=/run/etcfuse/etcfuse.sock \
-  --node-id=%H \
-  --lease-ttl=10s
+# No flags: --listen, --node-id and --lease-ttl used to be spelled out here,
+# and each was an exact restatement of the binary's own default (%H is the
+# hostname --node-id already falls back to). Stating them cost nothing until
+# configuration could also come from /etc/etcfs/etcfuse-meta.yaml — a flag
+# beats the file, so every one of them silently overrode the file's value for
+# the same setting. Settings belong in the file, or in a drop-in for what
+# genuinely differs per node.
+ExecStart=/usr/local/bin/etcfuse-meta
 Restart=on-failure
 RestartSec=5
 LimitNOFILE=65536
