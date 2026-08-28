@@ -1,0 +1,113 @@
+name: Manual Release
+
+# Builds and publishes release assets (binaries, packages, containers) for a
+# tag that already exists, without going through semantic-release. Needed the
+# first time a tag is pushed with no GitHub Release attached to it — e.g.
+# after mirroring history from elsewhere — and useful any time a past
+# release's assets need rebuilding.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, without the leading v (e.g. 0.44.0)"
+        required: true
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release-assets:
+    name: Release assets (binaries, packages, containers)
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ inputs.version }}
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v7
+        with:
+          ref: v${{ env.VERSION }}
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Ensure the release exists
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "v${VERSION}" >/dev/null 2>&1 || \
+            gh release create "v${VERSION}" --title "v${VERSION}" --generate-notes
+
+      - name: Install nfpm
+        run: GOTOOLCHAIN=auto go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2
+
+      - name: Build Go binaries
+        run: |
+          mkdir -p dist
+          LDFLAGS="-s -w -X github.com/etcfs/etcfs/internal/config.Version=${VERSION}"
+          CGO_ENABLED=0 go build -ldflags="$LDFLAGS" -o dist/etcfuse-meta ./cmd/etcfuse-meta
+          CGO_ENABLED=0 go build -ldflags="$LDFLAGS" -o dist/etcfsctl ./cmd/etcfsctl
+
+      - name: Build etcfuse (AL2023 container, for glibc compat)
+        run: |
+          docker run --rm -v "$PWD:/build" -w /build amazonlinux:2023 bash -c '
+            dnf install -y -q gcc fuse3-devel &&
+            cc -I. -Wall -Wextra -Werror -std=c11 -D_GNU_SOURCE -O2 -g \
+              cmd/etcfuse/main.c pkg/fuse/fuse.c pkg/fuse/ops.c pkg/block/block.c \
+              -o dist/etcfuse -lfuse3 -lpthread
+          '
+
+      - name: Package tarballs
+        run: |
+          for bin in etcfuse etcfuse-meta etcfsctl; do
+            tar czf "dist/${bin}-${VERSION}-linux-amd64.tar.gz" -C dist "$bin"
+          done
+
+      - name: Package deb/rpm
+        run: |
+          for spec in etcfuse etcfuse-meta etcfsctl; do
+            nfpm package -f "packaging/nfpm/${spec}.yaml" -p deb -t dist/
+            nfpm package -f "packaging/nfpm/${spec}.yaml" -p rpm -t dist/
+          done
+
+      - name: Checksums
+        run: |
+          cd dist
+          rm -f etcfuse etcfuse-meta etcfsctl
+          sha256sum *.tar.gz *.deb *.rpm > checksums.txt
+          cat checksums.txt
+
+      - name: Upload release assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "v${VERSION}" dist/*.tar.gz dist/*.deb dist/*.rpm dist/checksums.txt --clobber
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push etcfuse-meta image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/Dockerfile.etcfuse-meta
+          build-args: VERSION=${{ env.VERSION }}
+          push: true
+          tags: |
+            ghcr.io/etcfs/etcfuse-meta:${{ env.VERSION }}
+            ghcr.io/etcfs/etcfuse-meta:latest
+
+      - name: Build and push etcfuse image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/Dockerfile.etcfuse
+          push: true
+          tags: |
+            ghcr.io/etcfs/etcfuse:${{ env.VERSION }}
+            ghcr.io/etcfs/etcfuse:latest
