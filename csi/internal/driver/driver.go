@@ -24,7 +24,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/MHS-20/EtcFS/pkg/metadata"
+	"github.com/etcfs/etcfs/pkg/metadata"
 )
 
 // DefaultName is the CSI driver name, matching the `provisioner` field of a

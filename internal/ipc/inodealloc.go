@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/MHS-20/EtcFS/pkg/metadata"
+	"github.com/etcfs/etcfs/pkg/metadata"
 )
 
 // Inode number allocation.

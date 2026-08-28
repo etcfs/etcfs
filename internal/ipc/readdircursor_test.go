@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MHS-20/EtcFS/pkg/metadata"
+	"github.com/etcfs/etcfs/pkg/metadata"
 )
 
 // A cursor is only ever consulted for the request that continues exactly where

@@ -5,7 +5,7 @@
 #     --build-arg VERSION=$(git describe --tags --always) .
 #
 # The build context is the repository root, not csi/: the nested module
-# replaces github.com/MHS-20/EtcFS with ../, so the root module has to be
+# replaces github.com/etcfs/etcfs with ../, so the root module has to be
 # present for the build to resolve it.
 
 FROM golang:1.24-alpine AS builder

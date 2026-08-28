@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MHS-20/EtcFS/pkg/metadata"
-	"github.com/MHS-20/EtcFS/pkg/metrics"
+	"github.com/etcfs/etcfs/pkg/metadata"
+	"github.com/etcfs/etcfs/pkg/metrics"
 )
 
 // Directory name sets, for answering a lookup of a name that is not there.

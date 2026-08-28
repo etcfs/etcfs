@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MHS-20/EtcFS/pkg/metadata"
+	"github.com/etcfs/etcfs/pkg/metadata"
 )
 
 // The cache answers one question — "this name is not in this directory" — and

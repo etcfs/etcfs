@@ -9,7 +9,7 @@ import (
 	mvccpb "go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 
-	"github.com/MHS-20/EtcFS/pkg/metadata"
+	"github.com/etcfs/etcfs/pkg/metadata"
 )
 
 // revStore is the smallest store the auto-fix path needs: one extent key at a

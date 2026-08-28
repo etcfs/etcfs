@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/MHS-20/EtcFS/pkg/metadata"
-	"github.com/MHS-20/EtcFS/pkg/scrub"
+	"github.com/etcfs/etcfs/pkg/metadata"
+	"github.com/etcfs/etcfs/pkg/scrub"
 )
 
 type testLogger struct{ t *testing.T }

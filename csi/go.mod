@@ -3,12 +3,12 @@
 // in the repository builds from.  The replace keeps the two halves in lockstep:
 // the fencing semantics the controller relies on are the ones in this working
 // tree, not those of an older published tag.
-module github.com/MHS-20/EtcFS/csi
+module github.com/etcfs/etcfs/csi
 
 go 1.24.0
 
 require (
-	github.com/MHS-20/EtcFS v0.9.0
+	github.com/etcfs/etcfs v0.9.0
 	github.com/container-storage-interface/spec v1.10.0
 	github.com/kubernetes-csi/csi-test/v5 v5.3.1
 	github.com/stretchr/testify v1.10.0
@@ -56,4 +56,4 @@ require (
 	k8s.io/klog/v2 v2.130.1 // indirect
 )
 
-replace github.com/MHS-20/EtcFS => ../
+replace github.com/etcfs/etcfs => ../

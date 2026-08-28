@@ -120,7 +120,7 @@ helm upgrade etcfs-csi ./csi/deploy/helm/etcfs-csi \
 | `node.tolerations` | `operator: Exists` | The node plugin runs everywhere by default |
 | `storageClass.create` | `true` | Install a `StorageClass` alongside the driver |
 | `storageClass.reclaimPolicy` | `Retain` | `Delete` removes the volume's directory and its contents |
-| `image.repository` / `image.tag` | `ghcr.io/mhs-20/etcfs/etcfs-csi` / chart `appVersion` | Driver image |
+| `image.repository` / `image.tag` | `ghcr.io/etcfs/etcfs-csi` / chart `appVersion` | Driver image |
 
 ## Using it
 

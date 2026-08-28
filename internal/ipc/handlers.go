@@ -7,9 +7,9 @@ import (
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 
-	"github.com/MHS-20/EtcFS/pkg/arena"
-	"github.com/MHS-20/EtcFS/pkg/metadata"
-	"github.com/MHS-20/EtcFS/pkg/metrics"
+	"github.com/etcfs/etcfs/pkg/arena"
+	"github.com/etcfs/etcfs/pkg/metadata"
+	"github.com/etcfs/etcfs/pkg/metrics"
 )
 
 // Metadata operation handlers: everything answerable from etcd alone.

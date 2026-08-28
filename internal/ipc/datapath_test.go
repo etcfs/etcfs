@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/MHS-20/EtcFS/pkg/arena"
-	"github.com/MHS-20/EtcFS/pkg/blockio"
+	"github.com/etcfs/etcfs/pkg/arena"
+	"github.com/etcfs/etcfs/pkg/blockio"
 )
 
 // A device without O_DIRECT holds written bytes in this node's page cache, so

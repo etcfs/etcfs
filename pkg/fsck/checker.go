@@ -8,8 +8,8 @@ import (
 
 	mvccpb "go.etcd.io/etcd/api/v3/mvccpb"
 
-	"github.com/MHS-20/EtcFS/pkg/metadata"
-	"github.com/MHS-20/EtcFS/pkg/scrub"
+	"github.com/etcfs/etcfs/pkg/metadata"
+	"github.com/etcfs/etcfs/pkg/scrub"
 )
 
 // MetadataStore is the interface required by the checker.

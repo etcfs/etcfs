@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/MHS-20/EtcFS/internal/history"
+	"github.com/etcfs/etcfs/internal/history"
 )
 
 // The page-cache property: no node keeps the kernel's data pages for an inode

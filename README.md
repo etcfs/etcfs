@@ -1,8 +1,8 @@
 # EtcFS
 
-[![CI](https://github.com/mhs-20/EtcFS/actions/workflows/ci.yml/badge.svg)](https://github.com/mhs-20/EtcFS/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/mhs-20/EtcFS/branch/main/graph/badge.svg)](https://codecov.io/gh/mhs-20/EtcFS)
-[![Docs](https://img.shields.io/badge/docs-mkdocs-blue)](https://mhs-20.github.io/EtcFS/)
+[![CI](https://github.com/etcfs/etcfs/actions/workflows/ci.yml/badge.svg)](https://github.com/etcfs/etcfs/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/etcfs/etcfs/branch/main/graph/badge.svg)](https://codecov.io/gh/etcfs/etcfs)
+[![Docs](https://img.shields.io/badge/docs-mkdocs-blue)](https://etcfs.github.io/etcfs/)
 
 **A cluster-aware filesystem for shared raw block devices — the piece AWS and Kubernetes tell you to bring yourself.**
 
@@ -160,7 +160,7 @@ all.
 
 ## Documentation
 
-The [documentation site](https://mhs-20.github.io/EtcFS/) covers everything
+The [documentation site](https://etcfs.github.io/etcfs/) covers everything
 beyond this quick start:
 
 | | |

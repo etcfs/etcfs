@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/MHS-20/EtcFS/pkg/membership"
-	"github.com/MHS-20/EtcFS/pkg/metadata"
+	"github.com/etcfs/etcfs/pkg/membership"
+	"github.com/etcfs/etcfs/pkg/metadata"
 )
 
 func registerArena(ctx context.Context, store *MockStore, arenaID uint64) {

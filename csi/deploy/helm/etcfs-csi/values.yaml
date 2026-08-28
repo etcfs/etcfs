@@ -9,7 +9,7 @@
 driverName: csi.etcfs.io
 
 image:
-  repository: ghcr.io/mhs-20/etcfs/etcfs-csi
+  repository: ghcr.io/etcfs/etcfs-csi
   tag: ""            # defaults to .Chart.AppVersion
   pullPolicy: IfNotPresent
 

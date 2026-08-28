@@ -1,7 +1,7 @@
 site_name: EtcFS
 site_description: A Raft/etcd-coordinated cluster filesystem over shared raw block storage
-repo_url: https://github.com/MHS-20/EtcFS
-repo_name: MHS-20/EtcFS
+repo_url: https://github.com/etcfs/etcfs
+repo_name: etcfs/etcfs
 edit_uri: edit/main/docs/
 
 theme:

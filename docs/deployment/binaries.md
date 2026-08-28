@@ -12,18 +12,18 @@ and publishes:
 - `checksums.txt` (sha256, one line per artifact above)
 
 as assets on the GitHub release, and pushes three container images to
-`ghcr.io/mhs-20/etcfs/etcfuse`, `ghcr.io/mhs-20/etcfs/etcfuse-meta` and
-`ghcr.io/mhs-20/etcfs/etcfs-csi` (the [CSI driver](kubernetes-csi.md))
+`ghcr.io/etcfs/etcfuse`, `ghcr.io/etcfs/etcfuse-meta` and
+`ghcr.io/etcfs/etcfs-csi` (the [CSI driver](kubernetes-csi.md))
 (tagged `<version>` and `latest`). `etcfsctl` has no image — it's a client
 tool, not something you run as a service.
 
 ## Install from a release
 
 ```bash
-VERSION=$(curl -fsSL https://api.github.com/repos/MHS-20/EtcFS/releases/latest | jq -r .tag_name | tr -d v)
+VERSION=$(curl -fsSL https://api.github.com/repos/etcfs/etcfs/releases/latest | jq -r .tag_name | tr -d v)
 
-curl -fsSLO "https://github.com/MHS-20/EtcFS/releases/download/v${VERSION}/checksums.txt"
-curl -fsSLO "https://github.com/MHS-20/EtcFS/releases/download/v${VERSION}/etcfuse-meta_${VERSION}_amd64.deb"
+curl -fsSLO "https://github.com/etcfs/etcfs/releases/download/v${VERSION}/checksums.txt"
+curl -fsSLO "https://github.com/etcfs/etcfs/releases/download/v${VERSION}/etcfuse-meta_${VERSION}_amd64.deb"
 sha256sum --ignore-missing -c checksums.txt
 
 sudo apt install ./etcfuse-meta_${VERSION}_amd64.deb
@@ -43,8 +43,8 @@ RPM-based distros: `sudo dnf install ./etcfuse-meta-${VERSION}-1.x86_64.rpm`.
 ## Containers
 
 ```bash
-docker pull ghcr.io/mhs-20/etcfs/etcfuse-meta:latest
-docker pull ghcr.io/mhs-20/etcfs/etcfuse:latest
+docker pull ghcr.io/etcfs/etcfuse-meta:latest
+docker pull ghcr.io/etcfs/etcfuse:latest
 ```
 
 Built from `deploy/docker/Dockerfile.etcfuse-meta` and

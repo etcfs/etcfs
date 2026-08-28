@@ -7,9 +7,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/MHS-20/EtcFS/pkg/fsck"
-	"github.com/MHS-20/EtcFS/pkg/fsinfo"
-	"github.com/MHS-20/EtcFS/pkg/metadata"
+	"github.com/etcfs/etcfs/pkg/fsck"
+	"github.com/etcfs/etcfs/pkg/fsinfo"
+	"github.com/etcfs/etcfs/pkg/metadata"
 )
 
 // ---- C11.10: fsck offline check ----

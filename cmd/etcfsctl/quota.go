@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/MHS-20/EtcFS/pkg/metadata"
-	"github.com/MHS-20/EtcFS/pkg/quota"
+	"github.com/etcfs/etcfs/pkg/metadata"
+	"github.com/etcfs/etcfs/pkg/quota"
 )
 
 // runQuota dispatches the quota subcommands: no argument reports usage, "set"

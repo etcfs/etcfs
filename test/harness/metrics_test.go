@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/MHS-20/EtcFS/pkg/metrics"
-	"github.com/MHS-20/EtcFS/pkg/scrub"
+	"github.com/etcfs/etcfs/pkg/metrics"
+	"github.com/etcfs/etcfs/pkg/scrub"
 )
 
 // The metric names below are an API: dashboards and alert rules are written

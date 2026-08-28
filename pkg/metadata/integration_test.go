@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MHS-20/EtcFS/test/etcdtest"
+	"github.com/etcfs/etcfs/test/etcdtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	clientv3 "go.etcd.io/etcd/client/v3"

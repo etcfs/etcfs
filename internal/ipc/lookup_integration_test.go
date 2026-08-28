@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MHS-20/EtcFS/pkg/metadata"
+	"github.com/etcfs/etcfs/pkg/metadata"
 )
 
 // A lookup answers three different situations, and the difference between them

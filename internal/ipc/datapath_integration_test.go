@@ -24,11 +24,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MHS-20/EtcFS/internal/config"
-	"github.com/MHS-20/EtcFS/pkg/blockio"
-	"github.com/MHS-20/EtcFS/pkg/fencing"
-	"github.com/MHS-20/EtcFS/pkg/metadata"
-	"github.com/MHS-20/EtcFS/test/etcdtest"
+	"github.com/etcfs/etcfs/internal/config"
+	"github.com/etcfs/etcfs/pkg/blockio"
+	"github.com/etcfs/etcfs/pkg/fencing"
+	"github.com/etcfs/etcfs/pkg/metadata"
+	"github.com/etcfs/etcfs/test/etcdtest"
 )
 
 // deviceBytes is one arena plus room to grow, sparse on disk.

@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/MHS-20/EtcFS/pkg/metadata"
+	"github.com/etcfs/etcfs/pkg/metadata"
 )
 
 type Cluster struct {

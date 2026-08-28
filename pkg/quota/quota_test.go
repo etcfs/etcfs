@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MHS-20/EtcFS/pkg/metadata"
+	"github.com/etcfs/etcfs/pkg/metadata"
 )
 
 // tree builds the dirent key/target pair lists a prefix scan would produce.

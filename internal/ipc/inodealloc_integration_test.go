@@ -8,8 +8,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/MHS-20/EtcFS/pkg/metadata"
-	"github.com/MHS-20/EtcFS/test/etcdtest"
+	"github.com/etcfs/etcfs/pkg/metadata"
+	"github.com/etcfs/etcfs/test/etcdtest"
 )
 
 // Inode numbers are handed out from a block reserved in etcd, so the property

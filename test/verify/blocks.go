@@ -8,7 +8,7 @@ import (
 
 	"github.com/anishathalye/porcupine"
 
-	"github.com/MHS-20/EtcFS/internal/history"
+	"github.com/etcfs/etcfs/internal/history"
 )
 
 // The block model: is a device range ever owned by two things at once, or given

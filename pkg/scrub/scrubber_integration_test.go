@@ -19,9 +19,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MHS-20/EtcFS/pkg/arena"
-	"github.com/MHS-20/EtcFS/pkg/metadata"
-	"github.com/MHS-20/EtcFS/test/etcdtest"
+	"github.com/etcfs/etcfs/pkg/arena"
+	"github.com/etcfs/etcfs/pkg/metadata"
+	"github.com/etcfs/etcfs/test/etcdtest"
 )
 
 type testLogger struct{}

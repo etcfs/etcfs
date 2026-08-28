@@ -8,7 +8,7 @@ import (
 
 	"github.com/anishathalye/porcupine"
 
-	"github.com/MHS-20/EtcFS/internal/history"
+	"github.com/etcfs/etcfs/internal/history"
 )
 
 // The extent model: does a read ever return bytes that disagree with every

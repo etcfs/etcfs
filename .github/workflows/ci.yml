@@ -251,7 +251,7 @@ jobs:
       - name: Build Go binaries
         run: |
           mkdir -p dist
-          LDFLAGS="-s -w -X github.com/MHS-20/EtcFS/internal/config.Version=${VERSION}"
+          LDFLAGS="-s -w -X github.com/etcfs/etcfs/internal/config.Version=${VERSION}"
           CGO_ENABLED=0 go build -ldflags="$LDFLAGS" -o dist/etcfuse-meta ./cmd/etcfuse-meta
           CGO_ENABLED=0 go build -ldflags="$LDFLAGS" -o dist/etcfsctl ./cmd/etcfsctl
 
@@ -314,8 +314,8 @@ jobs:
           build-args: VERSION=${{ env.VERSION }}
           push: true
           tags: |
-            ghcr.io/mhs-20/etcfs/etcfuse-meta:${{ env.VERSION }}
-            ghcr.io/mhs-20/etcfs/etcfuse-meta:latest
+            ghcr.io/etcfs/etcfuse-meta:${{ env.VERSION }}
+            ghcr.io/etcfs/etcfuse-meta:latest
 
       - name: Build and push etcfuse image
         uses: docker/build-push-action@v6
@@ -324,8 +324,8 @@ jobs:
           file: deploy/docker/Dockerfile.etcfuse
           push: true
           tags: |
-            ghcr.io/mhs-20/etcfs/etcfuse:${{ env.VERSION }}
-            ghcr.io/mhs-20/etcfs/etcfuse:latest
+            ghcr.io/etcfs/etcfuse:${{ env.VERSION }}
+            ghcr.io/etcfs/etcfuse:latest
 
       - name: Build and push etcfs-csi image
         uses: docker/build-push-action@v6
@@ -337,5 +337,5 @@ jobs:
           build-args: VERSION=${{ env.VERSION }}
           push: true
           tags: |
-            ghcr.io/mhs-20/etcfs/etcfs-csi:${{ env.VERSION }}
-            ghcr.io/mhs-20/etcfs/etcfs-csi:latest
+            ghcr.io/etcfs/etcfs-csi:${{ env.VERSION }}
+            ghcr.io/etcfs/etcfs-csi:latest

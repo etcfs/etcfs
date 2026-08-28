@@ -13,12 +13,12 @@ version: ${VERSION}
 section: net
 priority: optional
 maintainer: Muhamad Huseyn Salman
-homepage: https://github.com/MHS-20/EtcFS
+homepage: https://github.com/etcfs/etcfs
 license: Apache-2.0
 description: |
   EtcFS metadata backend — etcd-backed namespace, locking, allocation and
   block I/O engine. Pairs with etcfuse (the FUSE frontend) over a Unix
-  socket; see https://mhs-20.github.io/EtcFS/deployment/binaries/.
+  socket; see https://etcfs.github.io/etcfs/deployment/binaries/.
 
 contents:
   - src: dist/etcfuse-meta

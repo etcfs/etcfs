@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/MHS-20/EtcFS/pkg/nvmeresv"
+	"github.com/etcfs/etcfs/pkg/nvmeresv"
 )
 
 // reservationDevice is the slice of pkg/nvmeresv this package uses, extracted

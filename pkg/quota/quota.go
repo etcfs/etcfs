@@ -23,7 +23,7 @@ package quota
 import (
 	"fmt"
 
-	"github.com/MHS-20/EtcFS/pkg/metadata"
+	"github.com/etcfs/etcfs/pkg/metadata"
 )
 
 // Limits is what a quota root allows. A zero field means unlimited, so a root

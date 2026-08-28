@@ -6,7 +6,7 @@ import (
 
 	"github.com/anishathalye/porcupine"
 
-	"github.com/MHS-20/EtcFS/internal/history"
+	"github.com/etcfs/etcfs/internal/history"
 )
 
 // Wire constants for the lock_hold synthetic history entries, matching

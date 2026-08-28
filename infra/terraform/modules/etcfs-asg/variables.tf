@@ -100,5 +100,5 @@ variable "lease_ttl" {
 variable "github_repo" {
   description = "owner/repo the release assets and version lookup are pulled from."
   type        = string
-  default     = "MHS-20/EtcFS"
+  default     = "etcfs/etcfs"
 }

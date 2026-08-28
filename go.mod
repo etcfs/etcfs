@@ -1,4 +1,4 @@
-module github.com/MHS-20/EtcFS
+module github.com/etcfs/etcfs
 
 // Pinned to 1.24: the golangci-lint release CI installs is built with go1.24
 // and refuses a go.mod targeting anything newer.  Raise both together, and keep

@@ -3,7 +3,7 @@ package ipc
 import (
 	"time"
 
-	"github.com/MHS-20/EtcFS/pkg/metadata"
+	"github.com/etcfs/etcfs/pkg/metadata"
 )
 
 // Synthetic history events for the three things caching made unobservable from

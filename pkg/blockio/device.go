@@ -9,7 +9,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/MHS-20/EtcFS/pkg/metrics"
+	"github.com/etcfs/etcfs/pkg/metrics"
 )
 
 const (

@@ -19,8 +19,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/MHS-20/EtcFS/pkg/metadata"
-	"github.com/MHS-20/EtcFS/test/etcdtest"
+	"github.com/etcfs/etcfs/pkg/metadata"
+	"github.com/etcfs/etcfs/test/etcdtest"
 )
 
 // allocOne reserves a single block and returns its device offset.  Allocate

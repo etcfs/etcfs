@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MHS-20/EtcFS/test/etcdtest"
+	"github.com/etcfs/etcfs/test/etcdtest"
 )
 
 // A departure marker describes the departure it was written for, not the node

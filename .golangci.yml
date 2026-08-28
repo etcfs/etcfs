@@ -17,7 +17,7 @@ linters-settings:
   gofmt:
     simplify: true
   goimports:
-    local-prefixes: github.com/MHS-20/EtcFS
+    local-prefixes: github.com/etcfs/etcfs
 
 issues:
   exclude-use-default: false

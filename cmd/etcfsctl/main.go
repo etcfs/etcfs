@@ -45,10 +45,10 @@ import (
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 
-	"github.com/MHS-20/EtcFS/pkg/fsck"
-	"github.com/MHS-20/EtcFS/pkg/fsinfo"
-	"github.com/MHS-20/EtcFS/pkg/metadata"
-	"github.com/MHS-20/EtcFS/pkg/scrub"
+	"github.com/etcfs/etcfs/pkg/fsck"
+	"github.com/etcfs/etcfs/pkg/fsinfo"
+	"github.com/etcfs/etcfs/pkg/metadata"
+	"github.com/etcfs/etcfs/pkg/scrub"
 )
 
 func main() {

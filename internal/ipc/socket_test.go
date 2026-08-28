@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MHS-20/EtcFS/internal/config"
-	"github.com/MHS-20/EtcFS/pkg/metadata"
+	"github.com/etcfs/etcfs/internal/config"
+	"github.com/etcfs/etcfs/pkg/metadata"
 )
 
 // attrWireSize is what rb_attr() in pkg/fuse/ops.c consumes per attr block:

@@ -7,12 +7,12 @@ version: ${VERSION}
 section: net
 priority: optional
 maintainer: Muhamad Huseyn Salman
-homepage: https://github.com/MHS-20/EtcFS
+homepage: https://github.com/etcfs/etcfs
 license: Apache-2.0
 description: |
   EtcFS FUSE frontend — mounts the cluster filesystem and forwards VFS
   operations to etcfuse-meta over a Unix socket. See
-  https://mhs-20.github.io/EtcFS/deployment/binaries/.
+  https://etcfs.github.io/etcfs/deployment/binaries/.
 
 depends:
   - libfuse3-3

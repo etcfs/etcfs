@@ -28,8 +28,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MHS-20/EtcFS/internal/config"
-	"github.com/MHS-20/EtcFS/pkg/metadata"
+	"github.com/etcfs/etcfs/internal/config"
+	"github.com/etcfs/etcfs/pkg/metadata"
 )
 
 // Watchdog monitors etcd lease health and triggers self-fencing

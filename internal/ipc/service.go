@@ -13,13 +13,13 @@ import (
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 
-	"github.com/MHS-20/EtcFS/internal/config"
-	"github.com/MHS-20/EtcFS/internal/history"
-	"github.com/MHS-20/EtcFS/pkg/arena"
-	"github.com/MHS-20/EtcFS/pkg/blockio"
-	"github.com/MHS-20/EtcFS/pkg/fencing"
-	"github.com/MHS-20/EtcFS/pkg/metadata"
-	"github.com/MHS-20/EtcFS/pkg/metrics"
+	"github.com/etcfs/etcfs/internal/config"
+	"github.com/etcfs/etcfs/internal/history"
+	"github.com/etcfs/etcfs/pkg/arena"
+	"github.com/etcfs/etcfs/pkg/blockio"
+	"github.com/etcfs/etcfs/pkg/fencing"
+	"github.com/etcfs/etcfs/pkg/metadata"
+	"github.com/etcfs/etcfs/pkg/metrics"
 )
 
 // Service handles FUSE operation requests from the C daemon.

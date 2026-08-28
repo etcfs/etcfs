@@ -34,16 +34,16 @@ import (
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 
-	"github.com/MHS-20/EtcFS/internal/config"
-	"github.com/MHS-20/EtcFS/internal/history"
-	"github.com/MHS-20/EtcFS/internal/ipc"
-	"github.com/MHS-20/EtcFS/pkg/blockio"
-	"github.com/MHS-20/EtcFS/pkg/fencing"
-	"github.com/MHS-20/EtcFS/pkg/fsck"
-	"github.com/MHS-20/EtcFS/pkg/fsinfo"
-	"github.com/MHS-20/EtcFS/pkg/metadata"
-	"github.com/MHS-20/EtcFS/pkg/metrics"
-	"github.com/MHS-20/EtcFS/pkg/scrub"
+	"github.com/etcfs/etcfs/internal/config"
+	"github.com/etcfs/etcfs/internal/history"
+	"github.com/etcfs/etcfs/internal/ipc"
+	"github.com/etcfs/etcfs/pkg/blockio"
+	"github.com/etcfs/etcfs/pkg/fencing"
+	"github.com/etcfs/etcfs/pkg/fsck"
+	"github.com/etcfs/etcfs/pkg/fsinfo"
+	"github.com/etcfs/etcfs/pkg/metadata"
+	"github.com/etcfs/etcfs/pkg/metrics"
+	"github.com/etcfs/etcfs/pkg/scrub"
 )
 
 // errSelfFenced reports that the daemon shut down because its own watchdog

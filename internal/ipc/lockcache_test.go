@@ -6,8 +6,8 @@ import (
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 
-	"github.com/MHS-20/EtcFS/internal/config"
-	"github.com/MHS-20/EtcFS/pkg/metadata"
+	"github.com/etcfs/etcfs/internal/config"
+	"github.com/etcfs/etcfs/pkg/metadata"
 )
 
 func testLogger() *config.Logger { return config.NewLogger(0) }

@@ -12,8 +12,8 @@ import (
 
 	"github.com/anishathalye/porcupine"
 
-	"github.com/MHS-20/EtcFS/internal/history"
-	"github.com/MHS-20/EtcFS/test/verify"
+	"github.com/etcfs/etcfs/internal/history"
+	"github.com/etcfs/etcfs/test/verify"
 )
 
 func main() {

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MHS-20/EtcFS/pkg/metadata"
+	"github.com/etcfs/etcfs/pkg/metadata"
 )
 
 // Write delegation buffers an inode's extents while this node holds its lock

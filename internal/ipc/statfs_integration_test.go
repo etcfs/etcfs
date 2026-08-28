@@ -9,7 +9,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/MHS-20/EtcFS/pkg/arena"
+	"github.com/etcfs/etcfs/pkg/arena"
 )
 
 // statfsFree runs the STATFS handler and returns the free byte count it

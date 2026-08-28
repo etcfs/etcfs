@@ -7,12 +7,12 @@ version: ${VERSION}
 section: net
 priority: optional
 maintainer: Muhamad Huseyn Salman
-homepage: https://github.com/MHS-20/EtcFS
+homepage: https://github.com/etcfs/etcfs
 license: Apache-2.0
 description: |
   EtcFS operator CLI — status, members, arenas, fsck, scrub, fencing and
   quota commands against a running cluster. See
-  https://mhs-20.github.io/EtcFS/deployment/etcfsctl/.
+  https://etcfs.github.io/etcfs/deployment/etcfsctl/.
 
 contents:
   - src: dist/etcfsctl

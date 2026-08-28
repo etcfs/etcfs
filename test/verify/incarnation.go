@@ -3,7 +3,7 @@ package verify
 import (
 	"sort"
 
-	"github.com/MHS-20/EtcFS/internal/history"
+	"github.com/etcfs/etcfs/internal/history"
 )
 
 // Daemon incarnations: which run of a node an event belongs to.

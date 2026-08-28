@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/MHS-20/EtcFS/pkg/nvmeresv"
+	"github.com/etcfs/etcfs/pkg/nvmeresv"
 )
 
 // fakeNamespace models the reservation state that matters: a set of

@@ -6,7 +6,7 @@ import (
 
 	"github.com/anishathalye/porcupine"
 
-	"github.com/MHS-20/EtcFS/internal/history"
+	"github.com/etcfs/etcfs/internal/history"
 )
 
 // The generation model: once a guarded commit has been rejected for a fence,

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/MHS-20/EtcFS/pkg/arena"
-	"github.com/MHS-20/EtcFS/pkg/metadata"
+	"github.com/etcfs/etcfs/pkg/arena"
+	"github.com/etcfs/etcfs/pkg/metadata"
 )
 
 // What one 4 KiB write costs as a function of how many extents the inode
