@@ -81,40 +81,6 @@ jobs:
       - name: Test
         run: make test-c
 
-  build-csi:
-    name: Build & Test (CSI)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: csi/go.mod
-      # The CSI driver is a nested module: the root job's ./... never reaches
-      # it, and its gRPC/CSI-spec dependency graph never reaches the root.
-      - name: Vet
-        working-directory: csi
-        run: go vet ./...
-      - name: Build
-        working-directory: csi
-        run: go build ./...
-      - name: Test
-        working-directory: csi
-        run: go test -race -count=1 ./...
-      - name: Start etcd
-        run: |
-          curl -sL https://github.com/etcd-io/etcd/releases/download/v3.5.18/etcd-v3.5.18-linux-amd64.tar.gz | tar xz
-          sudo mv etcd-v3.5.18-linux-amd64/etcd /usr/local/bin/
-          mkdir -p /tmp/etcd-data-csi
-          etcd --data-dir=/tmp/etcd-data-csi --listen-client-urls=http://127.0.0.1:2381 --advertise-client-urls=http://127.0.0.1:2381 &
-          sleep 3
-      - name: Fence-path integration test
-        working-directory: csi
-        env:
-          ETCD_ENDPOINTS: http://127.0.0.1:2381
-        run: go test -race -tags=integration -count=1 -timeout 240s ./...
-      - name: Helm lint
-        run: helm lint csi/deploy/helm/etcfs-csi --set etcd.endpoints=https://etcd:2379
-
   test-go:
     name: Test (Go)
     runs-on: ubuntu-latest
@@ -161,20 +127,6 @@ jobs:
         # actually show up.
         run: go test -race -tags=integration -count=1 -timeout 900s ./...
 
-  test-tla:
-    name: Test (TLA+ fencing model)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-      # 2-node models only (~30s): the 3-node model (DEEP=1) is a manual,
-      # multi-minute confirmation, not something every push should pay for.
-      - name: Check the fencing spec
-        run: scripts/test/tla-check.sh
-
   release:
     name: Semantic Release
     runs-on: ubuntu-latest
@@ -185,10 +137,8 @@ jobs:
         lint-sh,
         build-go,
         build-c,
-        build-csi,
         test-go,
         test-integration,
-        test-tla,
       ]
     if: github.event_name == 'push'
     outputs:
@@ -259,7 +209,7 @@ jobs:
       # does need to match the glibc of wherever it runs. Built here on
       # ubuntu-latest (glibc ~2.39+) it linked GLIBC_2.38 symbols that
       # don't exist on Amazon Linux 2023 (glibc 2.34, the AMI family every
-      # deployment doc and Terraform module in this repo targets) — the
+      # deployment doc and the etcfs-terraform-modules repo target) — the
       # released binary failed to even start there with "version
       # `GLIBC_2.38' not found". Found running the ASG deployment path
       # against a real AL2023 instance, not by inspection. Built inside the
@@ -326,16 +276,3 @@ jobs:
           tags: |
             ghcr.io/etcfs/etcfuse:${{ env.VERSION }}
             ghcr.io/etcfs/etcfuse:latest
-
-      - name: Build and push etcfs-csi image
-        uses: docker/build-push-action@v6
-        with:
-          # Root context: the nested csi module replaces the root module with
-          # ../, so the build needs both halves of the repository.
-          context: .
-          file: deploy/docker/Dockerfile.etcfs-csi
-          build-args: VERSION=${{ env.VERSION }}
-          push: true
-          tags: |
-            ghcr.io/etcfs/etcfs-csi:${{ env.VERSION }}
-            ghcr.io/etcfs/etcfs-csi:latest

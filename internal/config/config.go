@@ -251,7 +251,7 @@ func Parse() *Config {
 	flag.StringVar(&cfg.EC2InstanceID, "ec2-instance-id", "",
 		"This node's EC2 instance ID, recorded in its membership key so peers can detach the volume when it expires")
 	flag.StringVar(&cfg.HistoryLog, "history-log", "",
-		"Append every served operation to this file, for offline consistency checking (see docs/verification/porcupine.md)")
+		"Append every served operation to this file, for offline consistency checking (see https://github.com/etcfs/etcfs-docs/blob/main/docs/verification/porcupine.md)")
 	flag.BoolVar(&cfg.ReadOnly, "read-only", false,
 		"Reject every mutating FUSE operation with EROFS; for backup/inspection mounts and running fsck against a live volume")
 

@@ -30,8 +30,5 @@ crash.log
 *.tfvars
 dist/
 
-# TLA+ model checker, downloaded on demand by scripts/test/tla-check.sh
-specs/.tools/
-specs/states/
 *.toolbox
 .compare-run.lock

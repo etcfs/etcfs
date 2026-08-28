@@ -2,19 +2,19 @@
 
 [![CI](https://github.com/etcfs/etcfs/actions/workflows/ci.yml/badge.svg)](https://github.com/etcfs/etcfs/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/etcfs/etcfs/branch/main/graph/badge.svg)](https://codecov.io/gh/etcfs/etcfs)
-[![Docs](https://img.shields.io/badge/docs-mkdocs-blue)](https://etcfs.github.io/etcfs/)
+[![Docs](https://img.shields.io/badge/docs-mkdocs-blue)](https://etcfs.github.io/etcfs-docs/)
 
 **A cluster-aware filesystem for shared raw block devices — the piece AWS and Kubernetes tell you to bring yourself.**
 
 AWS EBS Multi-Attach will attach one io2 volume to sixteen instances at once. Kubernetes will hand it to you as a `ReadWriteMany` `volumeMode: Block` volume. Both then stop, and [the EBS CSI driver's documentation says why](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/blob/master/docs/multi-attach.md): using it safely "requires application-level coordination (e.g. via I/O fencing)", and failure to do so "can result in data loss and silent data corruption". Using ext4 on a Multi-Attach volume and mount it twice and it will get corrupted. The platform gives you the shared device and declines to make it safe.
 
-EtcFS is what goes on top. **etcd/Raft is the only source of durable truth**, and the shared device holds nothing but file bytes. No on-disk filesystem format, no kernel module, no bespoke distributed lock manager — a userspace FUSE daemon on each node presents POSIX semantics, backed by etcd for everything structural (namespace, inode metadata, locks, allocation) and direct block I/O for file content. The I/O fencing that AWS says you need is three independent layers, one of them enforced by the drive itself — see [Fencing](docs/architecture/fencing/self-fencing-watchdog.md).
+EtcFS is what goes on top. **etcd/Raft is the only source of durable truth**, and the shared device holds nothing but file bytes. No on-disk filesystem format, no kernel module, no bespoke distributed lock manager — a userspace FUSE daemon on each node presents POSIX semantics, backed by etcd for everything structural (namespace, inode metadata, locks, allocation) and direct block I/O for file content. The I/O fencing that AWS says you need is three independent layers, one of them enforced by the drive itself — see [Fencing](https://github.com/etcfs/etcfs-docs/blob/main/docs/architecture/fencing/self-fencing-watchdog.md).
 
 Traditional cluster filesystems (GFS2, OCFS2) keep durable truth *on disk* — inodes, bitmaps, a journal — and bolt a distributed lock manager on top to arbitrate access to it. EtcFS inverts that: etcd's replicated Raft log *is* the durable truth for every structural fact, and the disk is demoted to a flat, unformatted array of bytes addressed by extents `(logical_offset, disk_offset, length)` recorded in etcd. Atomicity, consistency, and metadata recovery come from etcd's existing quorum-replicated log almost for free, instead of a bespoke recovery protocol — at the cost of every structural operation being an etcd round trip, mitigated by client-side caching and keeping the hot data path (reads/writes to already-allocated extents) on direct block I/O with no etcd round trip at all.
 
 Status: implemented and under hardening. Cross-node `fcntl`/`flock` advisory
 locks are the one accepted-but-unenforced POSIX surface — see
-[Consistency and durability](docs/architecture/consistency/consistency-and-durability-model.md)
+[Consistency and durability](https://github.com/etcfs/etcfs-docs/blob/main/docs/architecture/consistency/consistency-and-durability-model.md)
 before relying on this for real data.
 
 ## What that inversion buys
@@ -22,7 +22,7 @@ before relying on this for real data.
 Measured against GFS2, GlusterFS, self-hosted NFS and JuiceFS, each on its own
 isolated AWS cluster, all in one session. Full ledger — including every scenario
 EtcFS loses — in the
-[benchmark overview](docs/reports/benchmark-reports/overview.md).
+[benchmark overview](https://github.com/etcfs/etcfs-docs/blob/main/docs/reports/benchmark-reports/overview.md).
 
 - **Recovery with no fence device and no journal replay.** A node is powered off
   mid-write holding locks; a survivor takes over its file in **2.19 s** and never
@@ -73,7 +73,7 @@ docker compose -f deploy/docker/docker-compose.yml down -v
 
 Or install a released binary/package/container and provision real
 infrastructure with the Terraform module — see
-**[Deployment](docs/deployment/index.md)**.
+**[Deployment](https://github.com/etcfs/etcfs-docs/blob/main/docs/deployment/index.md)**.
 
 ```bash
 etcfuse-meta --listen=/tmp/etcfuse.sock --etcd-endpoints=http://127.0.0.1:2379 \
@@ -84,7 +84,7 @@ etcfsctl --etcd-endpoints=http://127.0.0.1:2379 status
 ```
 
 Full flag reference and every config knob:
-[Configuration](docs/deployment/configuration.md).
+[Configuration](https://github.com/etcfs/etcfs-docs/blob/main/docs/deployment/configuration.md).
 
 ## How it measures up
 
@@ -92,7 +92,7 @@ Five filesystems, each on its own isolated AWS cluster with a dedicated
 1000-IOPS io2 Multi-Attach volume — `scripts/bench/compare/`. Every comparison
 below was measured in one session on 2026-08-24/25. Full method, caveats and the
 scenario-by-scenario ledger of wins and losses:
-[Benchmark overview](docs/reports/benchmark-reports/overview.md).
+[Benchmark overview](https://github.com/etcfs/etcfs-docs/blob/main/docs/reports/benchmark-reports/overview.md).
 
 **Where EtcFS wins — losing a node.** All five backends take one identical
 fault: the victim machine is powered off, nothing releases a lock, nothing runs
@@ -110,7 +110,7 @@ file the dead node held the lock on.
 GFS2's DLM lockspace goes to `kern_stop` / "wait fencing" and stops granting
 locks to *anyone* on the surviving node until a fence device confirms the kill —
 this harness configures none, which is a caveat the
-[report](docs/reports/benchmark-reports/node-kill-recovery.md)
+[report](https://github.com/etcfs/etcfs-docs/blob/main/docs/reports/benchmark-reports/node-kill-recovery.md)
 states plainly.
 
 **Where EtcFS wins — the latency tail.** Per competitor, at effectively the same
@@ -140,11 +140,11 @@ inode's lock key rides the create transaction, and evicted keys are released a
 batch at a time — so a created-and-written file costs two commits and a fraction
 where it cost six. The untar row does not move with them: that scenario is no
 longer commit-bound, and the remaining effect is smaller than the benchmark's
-own spread ([why](docs/reports/benchmark-reports/smallfile-storm.md)).
+own spread ([why](https://github.com/etcfs/etcfs-docs/blob/main/docs/reports/benchmark-reports/smallfile-storm.md)).
 
 It does not come down to nothing — the transaction that publishes a name commits
 before `create()` returns, and
-[deferring that is a wrong answer rather than a durability trade](docs/design-decisions.md#creates-are-not-deferred-into-a-batch).
+[deferring that is a wrong answer rather than a durability trade](https://github.com/etcfs/etcfs-docs/blob/main/docs/design-decisions.md#creates-are-not-deferred-into-a-batch).
 
 **Where it makes no difference.** A warm page cache: all five converge on
 530–620k IOPS on a RAM-resident working set, which is RAM, not a filesystem.
@@ -160,15 +160,22 @@ all.
 
 ## Documentation
 
-The [documentation site](https://etcfs.github.io/etcfs/) covers everything
+The [documentation site](https://etcfs.github.io/etcfs-docs/) covers everything
 beyond this quick start:
 
 | | |
 |---|---|
-| **[Deployment](docs/deployment/index.md)** | Terraform module, binaries/containers, configuration, `etcfsctl`, Prometheus + Grafana |
-| **[Architecture](docs/architecture/fuse/fuse-architecture.md)** | FUSE layer, metadata model, storage substrate, consistency, fencing, reliability, cluster ops — one doc per subsystem |
-| **[Reports](docs/reports/chaos-reports/fresh-cluster-per-scenario.md)** | Chaos-testing and benchmark results, by date |
-| **[Background](docs/background/etcd_raft_research.md)** | Research behind the design decisions: etcd/Raft internals, cluster-FS survey, VFS/FUSE, userspace FS patterns |
+| **[Deployment](https://github.com/etcfs/etcfs-docs/blob/main/docs/deployment/index.md)** | Terraform module, binaries/containers, configuration, `etcfsctl`, Prometheus + Grafana |
+| **[Architecture](https://github.com/etcfs/etcfs-docs/blob/main/docs/architecture/fuse/fuse-architecture.md)** | FUSE layer, metadata model, storage substrate, consistency, fencing, reliability, cluster ops — one doc per subsystem |
+| **[Reports](https://github.com/etcfs/etcfs-docs/blob/main/docs/reports/chaos-reports/fresh-cluster-per-scenario.md)** | Chaos-testing and benchmark results, by date |
+| **[Background](https://github.com/etcfs/etcfs-docs/blob/main/docs/background/etcd_raft_research.md)** | Research behind the design decisions: etcd/Raft internals, cluster-FS survey, VFS/FUSE, userspace FS patterns |
+
+## Related repositories
+
+- [etcfs-csi-driver](https://github.com/etcfs/etcfs-csi-driver) — Kubernetes CSI driver
+- [etcfs-terraform-modules](https://github.com/etcfs/etcfs-terraform-modules) — Terraform for provisioning clusters on AWS
+- [etcfs-tla-specs](https://github.com/etcfs/etcfs-tla-specs) — TLA+ models for the fencing and cached-lock protocols
+- [etcfs-docs](https://github.com/etcfs/etcfs-docs) — this documentation site's source
 
 Read the relevant subsystem doc before making a design decision that touches
 fencing, the write path, or the metadata schema.

@@ -22,7 +22,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-TF_DIR="${ETCFS_TF_DIR:-$PROJECT_ROOT/infra/terraform}"
+TF_DIR="${ETCFS_TF_DIR:-$PROJECT_ROOT/../etcfs-terraform-modules/terraform}"
 STATE_FILE="${ETCFS_STATE:-$PROJECT_ROOT/infra-state.json}"
 
 [[ -d "$TF_DIR" ]] || { echo "ERROR: terraform dir not found: $TF_DIR" >&2; exit 1; }

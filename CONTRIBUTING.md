@@ -21,17 +21,10 @@ make fmt          # goimports and clang-format, in place
 make hooks        # install the pre-push hook that runs the checks above
 ```
 
-The pre-push hook runs everything CI does, including the two docs checks: the
-`mkdocs build --strict` that publishes the site, and the `lychee` link check
-that catches a heading renamed out from under a table of contents. Both are
-skipped with a `SKIP` line if `mkdocs` or `lychee` is not installed, so install
-them to get the warning before CI does:
-
-```bash
-pip install -r requirements-docs.txt
-# lychee: cargo install lychee, or a release binary from
-# https://github.com/lycheeverse/lychee/releases
-```
+The pre-push hook runs everything CI does for this repo. Documentation lives
+in [etcfs-docs](https://github.com/etcfs/etcfs-docs), which runs its own
+`mkdocs build --strict` and `lychee` link check in CI — send docs changes
+there instead.
 
 `golangci-lint` is pinned rather than optional: the version lives in
 `.golangci-version`, CI installs exactly that, and the hook refuses to pass with
@@ -100,9 +93,10 @@ features and refactors in separate commits.
   code uses the standard library plus `testify`; the C daemon's wire handling
   is tested in `test/c/`. Tests needing a real etcd go behind the `integration`
   build tag.
-- **Documentation, in the same commit.** `docs/architecture/` has one page per
-  subsystem and it is the authoritative reference. If a change alters
-  behaviour, configuration, or setup, revise the page that already covers it
+- **Documentation, in a companion PR.** `docs/architecture/` in
+  [etcfs-docs](https://github.com/etcfs/etcfs-docs) has one page per subsystem
+  and it is the authoritative reference. If a change alters behaviour,
+  configuration, or setup, revise the page that already covers it there
   rather than adding a new one.
 - **Comments that explain why.** The codebase's comments record the reasoning
   behind non-obvious choices and the failure that motivated them. A comment
@@ -114,8 +108,9 @@ features and refactors in separate commits.
 `pkg/fencing`, `pkg/metadata/gen.go`, `pkg/arena`, and the extent-commit path
 in `internal/ipc` carry the invariants that keep two nodes from writing the
 same blocks. Before changing them, read
-`docs/architecture/fencing/fencing-generation-protocol.md` and
-`docs/architecture/storage/kleppmann-stale-write-analysis.md`.
+[`fencing-generation-protocol.md`](https://github.com/etcfs/etcfs-docs/blob/main/docs/architecture/fencing/fencing-generation-protocol.md)
+and
+[`kleppmann-stale-write-analysis.md`](https://github.com/etcfs/etcfs-docs/blob/main/docs/architecture/storage/kleppmann-stale-write-analysis.md).
 
 A change there should say which invariant it preserves and how that was
 checked. The chaos suite is how it is checked in practice:

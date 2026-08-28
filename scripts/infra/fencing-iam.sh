@@ -122,7 +122,8 @@ aws iam put-role-policy --role-name "$ROLE" \
     --policy-name etcfs-node-permissions --policy-document "$POLICY" || exit 1
 
 # SSM registration, not fencing: lets the graceful-leave Lambda (ASG scale-in
-# path, infra/terraform/modules/etcfs-asg) reach a *surviving* node via SSM
+# path, etcfs-terraform-modules' terraform/modules/etcfs-asg) reach a
+# *surviving* node via SSM
 # Run Command to issue `etcd member remove` for the node being terminated.
 # AWS-managed policy, not hand-rolled, since it also covers the SSM agent's
 # own connectivity requirements (ssmmessages:*, ec2messages:*) which change

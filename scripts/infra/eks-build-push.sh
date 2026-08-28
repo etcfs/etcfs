@@ -1,7 +1,10 @@
 #!/bin/bash
-# eks-build-push.sh — builds and pushes the three images infra/terraform-eks
-# needs (etcfuse-meta, etcfuse, etcfs-csi) to an ECR repository, and prints the
-# -var flags to pass straight to `terraform apply`.
+# eks-build-push.sh — builds and pushes the two images this repo owns
+# (etcfuse-meta, etcfuse) to an ECR repository, and prints the -var flags to
+# pass straight to `terraform apply` in etcfs-terraform-modules. The CSI
+# driver image is built and published (to ghcr.io/etcfs/etcfs-csi, which is
+# public) by etcfs-csi-driver's own CI — pass its tag as csi_image_tag
+# directly, or mirror it into your own ECR the same way this script does.
 #
 # The Terraform module takes image references as required variables rather
 # than defaulting to a public registry: a registry is account-specific, and a
@@ -25,7 +28,7 @@ VERSION="$(git -C "$PROJECT_ROOT" describe --tags --always --dirty 2>/dev/null |
 
 log() { echo "[$(date +%T)] $*"; }
 
-for repo in "$PREFIX/etcfuse-meta" "$PREFIX/etcfuse" "$PREFIX/etcfs-csi"; do
+for repo in "$PREFIX/etcfuse-meta" "$PREFIX/etcfuse"; do
     aws ecr describe-repositories --region "$REGION" --repository-names "$repo" >/dev/null 2>&1 \
         || aws ecr create-repository --region "$REGION" --repository-name "$repo" >/dev/null
 done
@@ -43,15 +46,11 @@ docker build --network=host -f "$PROJECT_ROOT/deploy/docker/Dockerfile.etcfuse" 
     -t "$ECR/$PREFIX/etcfuse:$VERSION" "$PROJECT_ROOT"
 docker push "$ECR/$PREFIX/etcfuse:$VERSION"
 
-log "=== building etcfs-csi ==="
-docker build --network=host -f "$PROJECT_ROOT/deploy/docker/Dockerfile.etcfs-csi" \
-    -t "$ECR/$PREFIX/etcfs-csi:$VERSION" --build-arg "VERSION=$VERSION" "$PROJECT_ROOT"
-docker push "$ECR/$PREFIX/etcfs-csi:$VERSION"
-
 log ""
 log "=== done ==="
-log "terraform -chdir=infra/terraform-eks apply \\"
+log "terraform -chdir=terraform-eks apply \\"
 log "  -var etcfuse_meta_image=$ECR/$PREFIX/etcfuse-meta:$VERSION \\"
 log "  -var etcfuse_image=$ECR/$PREFIX/etcfuse:$VERSION \\"
-log "  -var csi_image_repository=$ECR/$PREFIX/etcfs-csi \\"
-log "  -var csi_image_tag=$VERSION"
+log "  -var csi_image_repository=ghcr.io/etcfs/etcfs-csi \\"
+log "  -var csi_image_tag=<version from etcfs-csi-driver's own releases> \\"
+log "  -var csi_chart_version=<same version>"

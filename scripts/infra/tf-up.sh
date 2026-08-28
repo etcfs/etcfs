@@ -2,12 +2,16 @@
 # tf-up.sh — provision an EtcFS cluster with Terraform and bring the software
 # up on it: the Terraform equivalent of `create-infra.sh && setup-compute.sh`.
 #
+# The Terraform itself lives in a sibling checkout of
+# https://github.com/etcfs/etcfs-terraform-modules — set ETCFS_TF_DIR if
+# yours is not at ../etcfs-terraform-modules/terraform.
+#
 # Three steps, each usable on its own:
-#   1. terraform init + apply        (infra/terraform)
+#   1. terraform init + apply        ($TF_DIR)
 #   2. tf-export-state.sh            (outputs -> infra-state.json)
 #   3. bootstrap-cluster.sh          (etcd + both daemons on every node)
 #
-# Teardown is `terraform -chdir=infra/terraform destroy` — destroy-infra.sh is
+# Teardown is `terraform -chdir=$TF_DIR destroy` — destroy-infra.sh is
 # for the bash-provisioned path and reads a state file Terraform owns here.
 #
 # Usage:
@@ -19,7 +23,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-TF_DIR="${ETCFS_TF_DIR:-$PROJECT_ROOT/infra/terraform}"
+TF_DIR="${ETCFS_TF_DIR:-$PROJECT_ROOT/../etcfs-terraform-modules/terraform}"
 STATE_FILE="${ETCFS_STATE:-$PROJECT_ROOT/infra-state.json}"
 
 BOOTSTRAP=true

@@ -8,6 +8,8 @@ Layout: `cmd/etcfuse` (C FUSE daemon) · `cmd/etcfuse-meta` (Go metadata daemon)
 
 The two daemons talk over a hand-rolled length-prefixed binary protocol on a Unix socket (`internal/ipc/socket.go`). There is no gRPC/protobuf anywhere in the wire path — an earlier `proto/ipc.proto` sketch was removed as dead weight.
 
+Every `docs/...` path referenced below lives in the sibling [etcfs-docs](https://github.com/etcfs/etcfs-docs) repo, not in this checkout — the Kubernetes CSI driver, Terraform modules, and TLA+ specs are likewise split into [etcfs-csi-driver](https://github.com/etcfs/etcfs-csi-driver), [etcfs-terraform-modules](https://github.com/etcfs/etcfs-terraform-modules), and [etcfs-tla-specs](https://github.com/etcfs/etcfs-tla-specs).
+
 ### Chaos suite status
 
 **7 of 7 assertions pass**, most recently on the docker cluster (2026-08-10) alongside arena reclamation (6/6) and a 240 s fuzz run; and earlier on real AWS infra (`chaos-report-20260730-180644`, commit `660a14a`): S1, S2, S3 (both assertions), S5, S6, S7. Full scenario descriptions, the two product bugs that were fixed to get here (an inode-numbering collision with the FUSE root directory, and a `readdirplus` parser desync), the harness bugs found along the way, and known gaps not covered by this suite are all in `docs/reports/chaos-reports/fresh-cluster-per-scenario.md` — read that before touching `scripts/test/chaos-test.sh` or the write path. Single-cluster sequential and randomized-fuzz results are in `docs/reports/chaos-reports/single-cluster-and-fuzz.md`.

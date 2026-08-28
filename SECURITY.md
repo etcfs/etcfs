@@ -48,7 +48,7 @@ defects:
 
 - **POSIX locks are node-local.** `fcntl`/`flock` are enforced within a node and
   exclude nothing between nodes; the daemon warns about this at startup. See
-  `docs/architecture/metadata/posix-lock-operations.md`.
+  [`posix-lock-operations.md`](https://github.com/etcfs/etcfs-docs/blob/main/docs/architecture/metadata/posix-lock-operations.md).
 - **Shared writable `mmap` across nodes** is not supported.
 - **An untrusted etcd cluster.** etcd is the source of truth for all structural
   state; anyone able to write to the keyspace can do anything the filesystem

@@ -293,7 +293,7 @@ func run(ctx context.Context, cfg *config.Config, log *config.Logger) error {
 	// relying on cross-node locking gets no other signal — the calls succeed,
 	// they simply exclude nothing on other nodes.
 	log.Warn("POSIX file locks (fcntl/flock) are enforced within this node only, NOT across the " +
-		"cluster; see docs/architecture/metadata/posix-lock-operations.md")
+		"cluster; see https://github.com/etcfs/etcfs-docs/blob/main/docs/architecture/metadata/posix-lock-operations.md")
 
 	// Start background scrubber (checks every 30s)
 	scrubber := scrub.New(store, cfg.NodeID, 30*time.Second, log)
