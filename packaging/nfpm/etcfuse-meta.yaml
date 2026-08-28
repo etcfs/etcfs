@@ -29,6 +29,13 @@ contents:
     dst: /usr/lib/systemd/system/etcfuse-meta.service
     file_info:
       mode: 0644
+  # Shipped as .example, never as the live /etc/etcfs/etcfuse-meta.yaml the
+  # daemon reads: that path is the operator's, and a package that owned it
+  # would overwrite a real configuration on every upgrade.
+  - src: deploy/etcfs/etcfuse-meta.yaml.example
+    dst: /etc/etcfs/etcfuse-meta.yaml.example
+    file_info:
+      mode: 0644
 
 scripts:
   postinstall: packaging/nfpm/scripts/postinstall.sh

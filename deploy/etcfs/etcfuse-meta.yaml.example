@@ -1,0 +1,107 @@
+# etcfuse-meta configuration — reference copy.
+#
+# Installed as /etc/etcfs/etcfuse-meta.yaml.example. Copy it to
+# /etc/etcfs/etcfuse-meta.yaml, which is the path the daemon reads when
+# --config is not given, and delete what you do not need: every key here is
+# optional, and one that is absent keeps the daemon's own default.
+#
+# The same settings can come from three places, in decreasing precedence: a
+# command-line flag, an environment variable (ETCFS_ plus the key uppercased
+# with dashes as underscores — ETCFS_METRICS_ADDR), then this file. A flag
+# therefore silently overrides the key of the same name here, which is why
+# the packaged systemd unit passes no flags at all.
+#
+# Keys that vary per node — node-id, ec2-instance-id — are best left out of
+# a file shipped to every node and passed in a systemd drop-in instead:
+#
+#   # /etc/systemd/system/etcfuse-meta.service.d/override.conf
+#   [Service]
+#   ExecStart=
+#   ExecStart=/usr/local/bin/etcfuse-meta --node-id=node-3 --ec2-instance-id=i-0abc123
+#
+# Full reference: https://github.com/etcfs/etcfs-docs/blob/main/docs/deployment/configuration.md
+
+# ---- etcd ----
+
+# Every member of the cluster's etcd. A list, or the comma-separated string
+# the flag takes.
+etcd-endpoints:
+  - http://10.0.1.10:2379
+  - http://10.0.1.11:2379
+  - http://10.0.1.12:2379
+
+# The member colocated with this node, if there is one. Reads are served
+# through it, so a data-path read is answered locally instead of crossing the
+# network; the round-robin client above stays the fallback.
+# etcd-local-endpoint: http://10.0.1.10:2379
+
+# Client TLS, if your etcd is not plaintext.
+# etcd-cert: /etc/etcfs/client.crt
+# etcd-key: /etc/etcfs/client.key
+# etcd-ca: /etc/etcfs/ca.crt
+
+# ---- Identity ----
+
+# Namespaces this cluster's membership, locking and fencing keys in etcd.
+# Two clusters sharing one etcd must not share this.
+cluster-name: etcfuse
+
+# Membership lease TTL. The self-fencing watchdog fires at 2x this, which must
+# stay above the 10s request timeout — so 6s is the lowest value accepted.
+lease-ttl: 10s
+
+# ---- Shared data volume ----
+
+# Prefer volume-id over block-device: the device path is re-resolved from the
+# volume's serial on every start, and a literal path does not survive a
+# detach/reattach cycle — the kernel may hand the volume back under a
+# different name.
+volume-id: vol-0abcdef1234567890
+# block-device: /dev/nvme1n1
+
+# ---- Fencing ----
+#
+# Read docs/architecture/fencing/self-fencing-watchdog.md before choosing:
+# these are not interchangeable in what they guarantee.
+
+# Control-plane fencing: peers detach the volume from an expired node and wait
+# for AWS to confirm it. Needs the etcfs-nodes IAM instance profile.
+ebs-volume-id: vol-0abcdef1234567890
+
+# Device-enforced fencing: peers preempt an expired node's NVMe reservation
+# key and the drive itself rejects its writes. Stronger, and takes precedence
+# over ebs-volume-id when both are set.
+# nvme-reservations: true
+
+# ---- Observability ----
+
+# Serves /metrics, /healthz and /readyz. Unset disables all three.
+metrics-addr: :9090
+
+# 0=error, 1=info, 2=debug.
+log-level: 1
+
+# ---- Tuning ----
+# Every key below is safe to omit; the value shown is the default.
+
+# How long a write's extent may stay buffered before it is published to etcd.
+# 0 commits every write before acknowledging it — nothing is ever lost, and
+# every write carries a Raft commit.
+# metadata-flush-interval: 100ms
+
+# Buffer a deferred write's data alongside its extent and put it on the device
+# at flush time, coalesced.
+# write-data-cache: true
+
+# How long the kernel may answer a name's existence, and an inode's
+# attributes, from its own caches. Peers push an invalidation on every change,
+# so these bound only what an unresumable etcd watch would miss.
+# entry-timeout: 1m
+# attr-timeout: 1m
+
+# Let the kernel keep data pages for a file this node holds the lock on.
+# page-cache: true
+
+# Reject every mutating operation with EROFS — for a backup or inspection
+# mount alongside a writer.
+# read-only: false

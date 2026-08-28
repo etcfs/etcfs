@@ -9,6 +9,12 @@
 # fail on every install.
 set -e
 
+# The directory the daemon's default --config path lives in. Created here so
+# an operator can drop the file in without first working out where it goes;
+# the file itself is never created by the package (see the .example alongside
+# it), so an install still starts nothing.
+mkdir -p /etc/etcfs
+
 if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
     systemctl daemon-reload || true
 fi
