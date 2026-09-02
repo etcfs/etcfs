@@ -255,7 +255,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push etcfuse-meta image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: deploy/docker/Dockerfile.etcfuse-meta
@@ -266,7 +266,7 @@ jobs:
             ghcr.io/etcfs/etcfuse-meta:latest
 
       - name: Build and push etcfuse image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: deploy/docker/Dockerfile.etcfuse
