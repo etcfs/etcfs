@@ -70,7 +70,14 @@ else
     # linter typechecks against the export data of whichever toolchain is on
     # PATH, and a release built for an older Go cannot read a newer one's, so a
     # newer Go here reports every package as broken while CI is clean.
-    pinned_go="go$(awk '/^go [0-9]/{print $2; exit}' go.mod)"
+    # The toolchain line when there is one, exactly as CI's setup-go resolves
+    # it. Falling back to the `go` line alone is not enough: that line may name
+    # a language version like "1.26", and GOTOOLCHAIN rejects "go1.26" as "a
+    # language version but not a toolchain version".
+    pinned_go="$(awk '/^toolchain go[0-9]/{print $2; exit}' go.mod)"
+    if [[ -z "$pinned_go" ]]; then
+        pinned_go="go$(awk '/^go [0-9]/{print $2; exit}' go.mod)"
+    fi
     run_check "golangci-lint ${pinned_lint}" \
         env GOTOOLCHAIN="$pinned_go" golangci-lint run --timeout=5m ./...
 fi

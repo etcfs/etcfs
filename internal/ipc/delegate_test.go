@@ -50,7 +50,8 @@ func TestPendingKeepsTheFirstComparisonPerKey(t *testing.T) {
 	}
 	// The surviving comparison for the reused key must be the create check the
 	// first write brought, not the second write's revision check.
-	if cmps[0].Target != clientv3.Compare(clientv3.CreateRevision("x"), "=", 0).Target {
+	want := clientv3.Compare(clientv3.CreateRevision("x"), "=", 0)
+	if cmps[0].GetCompare().Target != want.GetCompare().Target {
 		t.Errorf("comparison for the reused key was replaced by a later write's")
 	}
 

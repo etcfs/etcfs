@@ -150,7 +150,7 @@ func TestDirentWatchIsReopenedWhenItEnds(t *testing.T) {
 				ch := make(chan clientv3.WatchResponse, 1)
 				// One response, so the loop has a revision to resume from, then
 				// a watch that has ended.
-				ch <- clientv3.WatchResponse{Header: pb.ResponseHeader{Revision: 41}}
+				ch <- clientv3.WatchResponse{Header: &pb.ResponseHeader{Revision: 41}}
 				close(ch)
 				return ch
 			},
@@ -200,7 +200,7 @@ func TestCompactedWatchReportsTheGapAndRestartsFromCurrent(t *testing.T) {
 		open: func(resume int64) clientv3.WatchChan {
 			opens <- resume
 			ch := make(chan clientv3.WatchResponse, 2)
-			ch <- clientv3.WatchResponse{Header: pb.ResponseHeader{Revision: 41}}
+			ch <- clientv3.WatchResponse{Header: &pb.ResponseHeader{Revision: 41}}
 			ch <- clientv3.WatchResponse{Canceled: true, CompactRevision: 100}
 			close(ch)
 			return ch
