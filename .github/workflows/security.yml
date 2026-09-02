@@ -1,0 +1,111 @@
+name: Security
+
+# Separate from CI so that a security finding is legible on its own rather than
+# buried among lint and build jobs, and so the schedule can run these against a
+# tree nobody has pushed to — most of what they catch is a new advisory against
+# unchanged code, which a push-triggered workflow would never see.
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  schedule:
+    # Monday morning: a week's advisories, reported before the week's work
+    # starts rather than after it.
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [go, c-cpp]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        if: matrix.language == 'go'
+        with:
+          go-version-file: go.mod
+
+      # The C daemon links libfuse3, so the build CodeQL traces has to be able
+      # to find its headers; without them the C analysis silently covers
+      # nothing.
+      - name: Install libfuse3
+        if: matrix.language == 'c-cpp'
+        run: sudo apt-get install -y libfuse3-dev
+
+      - name: Initialise CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # security-extended adds the rules that are worth the false-positive
+          # rate on a daemon that runs as root and parses a binary protocol
+          # from the kernel.
+          queries: security-extended
+
+      # Built explicitly rather than by autobuild: the C daemon has no
+      # configure step for autobuild to find, and the Go build has to be the
+      # one the Makefile does so that the analysed code is the shipped code.
+      - name: Build
+        run: |
+          if [ "${{ matrix.language }}" = "go" ]; then
+            go build ./...
+          else
+            make -C cmd/etcfuse
+          fi
+
+      - name: Analyse
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}
+
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      # GOTOOLCHAIN=auto for the same reason the release job needs it: this
+      # tool's own go.mod targets a newer Go than go.mod pins for
+      # golangci-lint compatibility, and `local` refuses to fetch it.
+      - name: Run govulncheck
+        run: GOTOOLCHAIN=auto go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  sanitizers:
+    name: C tests (ASan + UBSan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install deps
+        run: sudo apt-get install -y libfuse3-dev
+
+      # The same sources and flags make test-c builds, plus the sanitizers and
+      # -O1 (ASan needs frame pointers to symbolise, and -O2 inlines away the
+      # frames that name the fault). -fno-sanitize-recover makes a finding fail
+      # the job: UBSan's default is to print and continue, which turns a real
+      # defect into a log line nobody reads.
+      - name: Build C tests with sanitizers
+        run: |
+          mkdir -p bin
+          cc -I. -Wall -Wextra -Werror -std=c11 -D_GNU_SOURCE -O1 -g \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            -fno-sanitize-recover=all \
+            test/c/test_ops.c pkg/fuse/fuse.c pkg/block/block.c \
+            -o bin/test-c-asan -lfuse3 -lpthread
+
+      - name: Run
+        env:
+          ASAN_OPTIONS: detect_leaks=1:strict_string_checks=1:detect_stack_use_after_return=1
+          UBSAN_OPTIONS: print_stacktrace=1
+        run: ./bin/test-c-asan

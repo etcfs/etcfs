@@ -8,14 +8,16 @@ EtcFS wins and loses.
 
 ## Next steps, ranked
 
-**1. Put security tooling in CI.** There is none: no `govulncheck`, `gosec`,
-CodeQL, Trivy, SBOM, Dependabot or Scorecard anywhere in `.github/`. Ranked by
-value for a root-running FUSE daemon: ASan/UBSan builds of the existing C tests;
-a libFuzzer target for the C request path, which the system-level chaos fuzzers
-do not cover for memory safety; `govulncheck`; pinning Actions to SHAs rather
-than the mutable tags the release pipeline currently trusts to publish binaries,
-packages, containers and the Helm chart; signing releases and attaching
-provenance.
+**1. Finish the security tooling in CI.** A `Security` workflow now runs CodeQL
+over both languages, `govulncheck`, and the C wire tests under ASan and UBSan,
+with Dependabot opening the upgrades. Still owed, in order of value for a
+root-running FUSE daemon: a libFuzzer target for the C request path, which the
+system-level chaos fuzzers do not cover for memory safety; pinning Actions to
+SHAs rather than the mutable tags the release pipeline currently trusts to
+publish binaries, packages, containers and the Helm chart; signing releases and
+attaching provenance; a container scan (Trivy) and an SBOM for the published
+images. Scorecard is worth running once to rank what is left rather than as a
+standing job.
 
 ## Deferred
 
