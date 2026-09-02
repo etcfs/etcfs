@@ -10,7 +10,7 @@
 #   make dev         start docker-compose development environment
 #   make check       lint + test (CI entry point)
 
-.PHONY: all test lint fmt clean dev check test-conformance test-integration test-e2e
+.PHONY: all test lint fmt clean dev check test-conformance test-integration test-e2e fuzz-c
 
 GO_ENTRY   := ./cmd/etcfuse-meta
 GO_OUT     := bin/etcfuse-meta
@@ -53,6 +53,8 @@ test-go:
 # The test binary includes ops.c, so it needs the same flags and libraries the
 # daemon is built with, minus the daemon's own main.
 C_TEST_SRC  := test/c/test_ops.c
+# Formatted and format-checked with the rest, though it is built only by fuzz-c.
+C_FUZZ_SRC  := test/c/fuzz_wire.c
 
 test-c: bin/test-c
 	./bin/test-c
@@ -60,6 +62,26 @@ test-c: bin/test-c
 bin/test-c: $(C_TEST_SRC) $(C_SRCS) $(C_HDRS)
 	@mkdir -p bin
 	$(CC) $(C_CFLAGS) $(C_TEST_SRC) pkg/fuse/fuse.c pkg/block/block.c -o $@ $(C_LIBS)
+
+# libFuzzer over the response reader every FUSE operation parses its reply
+# with.  Clang specifically: -fsanitize=fuzzer is not a gcc feature, so this is
+# not built by `make test` and does not gate an ordinary build.
+#
+# FUZZ_SECONDS bounds a run so it can sit in CI; a real hunt wants far longer
+# and its own corpus directory, which is why that is a variable and the corpus
+# is a path rather than a temporary.
+FUZZ_SECONDS ?= 60
+FUZZ_CORPUS  ?= bin/fuzz-corpus
+FUZZ_CFLAGS  := -I. -std=c11 -D_GNU_SOURCE -O1 -g \
+                -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer
+
+fuzz-c: bin/fuzz-wire
+	@mkdir -p $(FUZZ_CORPUS)
+	./bin/fuzz-wire -max_total_time=$(FUZZ_SECONDS) $(FUZZ_CORPUS)
+
+bin/fuzz-wire: test/c/fuzz_wire.c $(C_SRCS) $(C_HDRS)
+	@mkdir -p bin
+	clang $(FUZZ_CFLAGS) test/c/fuzz_wire.c pkg/fuse/fuse.c pkg/block/block.c -o $@ $(C_LIBS)
 
 # The suites behind the `integration` build tag: the handlers, the lock cache,
 # the flusher and the recall path against a real etcd.  Needs one running —
@@ -102,7 +124,7 @@ lint-go:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) golangci-lint run ./...
 
 lint-c:
-	clang-format --dry-run --Werror $(C_SRCS) $(C_HDRS) $(C_TEST_SRC)
+	clang-format --dry-run --Werror $(C_SRCS) $(C_HDRS) $(C_TEST_SRC) $(C_FUZZ_SRC)
 
 lint-sh:
 	shellcheck scripts/infra/*.sh scripts/test/*.sh scripts/bench/*.sh scripts/bench/compare/*.sh
@@ -121,7 +143,7 @@ fmt-go:
 	goimports -w .
 
 fmt-c:
-	clang-format -i $(C_SRCS) $(C_HDRS) $(C_TEST_SRC)
+	clang-format -i $(C_SRCS) $(C_HDRS) $(C_TEST_SRC) $(C_FUZZ_SRC)
 
 # ---- Docker dev environment ----
 
@@ -156,6 +178,7 @@ help:
 	@echo "EtcFS build targets:"
 	@echo "  make all              build everything"
 	@echo "  make test             run unit tests (Go, C)"
+	@echo "  make fuzz-c           fuzz the C response reader (needs clang)"
 	@echo "  make lint             run all linters"
 	@echo "  make fmt              auto-format code"
 	@echo "  make hooks            install git pre-push hook"

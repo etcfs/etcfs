@@ -150,3 +150,32 @@ jobs:
         with:
           sarif_file: trivy.sarif
           category: trivy
+
+  fuzz:
+    name: Fuzz (C response reader)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Install deps
+        run: sudo apt-get install -y libfuse3-dev clang
+
+      # A short run per push, which is a smoke test rather than a hunt: it
+      # catches a reader that regressed into reading past its buffer, not a
+      # deep bug that needs hours and a corpus. The corpus is not persisted
+      # between runs, so each starts cold — a real campaign is `make fuzz-c`
+      # locally with FUZZ_SECONDS raised and a corpus directory that lives.
+      - name: Fuzz
+        run: make fuzz-c FUZZ_SECONDS=120
+
+      # The input that broke it, when one is found: without this the log names
+      # a crash nobody can reproduce.
+      - name: Upload crashers
+        if: failure()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: fuzz-crashers
+          path: |
+            crash-*
+            leak-*
+            timeout-*
+          if-no-files-found: ignore
