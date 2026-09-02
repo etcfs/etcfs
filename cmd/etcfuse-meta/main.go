@@ -343,12 +343,13 @@ func run(ctx context.Context, cfg *config.Config, log *config.Logger) error {
 			"flush_interval", cfg.MetadataFlushInterval, "write_data_cache", cfg.WriteDataCache)
 	}
 	go func() {
-		if err := ipc.StartNotifyServer(svc, cfg.NotifyAddr); err != nil {
-			// Not fatal: the mount works without it, but every node's caches
-			// then rely on their timeouts alone, so it must not be silent.
-			log.Error("cache-invalidation notify server stopped; peers will not be "+
-				"invalidated until it is restarted", "path", cfg.NotifyAddr, "error", err)
-		}
+		// Unconditional, because the server only ever returns by failing: its
+		// accept loop has no successful exit. Not fatal — the mount works
+		// without it, but every node's caches then rely on their timeouts
+		// alone, so it must not be silent.
+		err := ipc.StartNotifyServer(svc, cfg.NotifyAddr)
+		log.Error("cache-invalidation notify server stopped; peers will not be "+
+			"invalidated until it is restarted", "path", cfg.NotifyAddr, "error", err)
 	}()
 	serveErr := ipc.StartSocketServer(ctx, svc, cfg.ListenAddr, log)
 

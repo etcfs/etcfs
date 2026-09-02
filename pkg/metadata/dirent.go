@@ -500,21 +500,27 @@ func (s *Store) AtomicRmdir(ctx context.Context, parent uint64, name string) err
 			return fail("%w", ErrNotDir)
 		}
 
-		cmps := []clientv3.Cmp{
-			clientv3.Compare(clientv3.ModRevision(direntKey), "=", direntKvs[0].ModRevision),
-			InodeUnchanged(ino, rev),
-			DirEmpty(ino),
-		}
-		ops := []clientv3.Op{
-			DeleteDirent(parent, name),
-			clientv3.OpDelete(InodeKey(ino)),
-		}
-		// The ".." this directory pointed at its parent goes with it.
+		// The ".." this directory pointed at its parent goes with it. Read
+		// before the two slices are built so both can be sized for what they
+		// will actually hold.
 		drop, err := s.adjustDirNlink(ctx, parent, -1)
 		if err != nil {
 			return fail("%w", err)
 		}
+
+		cmps := make([]clientv3.Cmp, 0, 3+len(drop.cmps))
+		cmps = append(cmps,
+			clientv3.Compare(clientv3.ModRevision(direntKey), "=", direntKvs[0].ModRevision),
+			InodeUnchanged(ino, rev),
+			DirEmpty(ino),
+		)
 		cmps = append(cmps, drop.cmps...)
+
+		ops := make([]clientv3.Op, 0, 2+len(drop.ops))
+		ops = append(ops,
+			DeleteDirent(parent, name),
+			clientv3.OpDelete(InodeKey(ino)),
+		)
 		ops = append(ops, drop.ops...)
 
 		ok, err := s.Txn(ctx, cmps, ops, nil)
