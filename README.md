@@ -1,6 +1,7 @@
 # EtcFS
 
 [![CI](https://github.com/etcfs/etcfs/actions/workflows/ci.yml/badge.svg)](https://github.com/etcfs/etcfs/actions/workflows/ci.yml)
+[![CodeFactor](https://www.codefactor.io/repository/github/etcfs/etcfs/badge)](https://www.codefactor.io/repository/github/etcfs/etcfs)
 [![codecov](https://codecov.io/gh/etcfs/etcfs/branch/main/graph/badge.svg)](https://codecov.io/gh/etcfs/etcfs)
 [![Docs](https://img.shields.io/badge/docs-mkdocs-blue)](https://etcfs.github.io/etcfs-docs/)
 
