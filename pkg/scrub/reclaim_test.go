@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	pb "go.etcd.io/etcd/api/v3/etcdserverpb"
 	mvccpb "go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 
@@ -41,7 +40,7 @@ func (s *revStore) Txn(_ context.Context, ifs []clientv3.Cmp, thens, _ []clientv
 		current = 0
 	}
 	for _, c := range ifs {
-		if (*pb.Compare)(&c).GetModRevision() != current {
+		if c.GetCompare().GetModRevision() != current {
 			return false, nil
 		}
 	}
