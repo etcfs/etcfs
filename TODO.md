@@ -43,8 +43,15 @@ count away entirely and with it the per-open page-cache decision. Folding
 `open`+`read` into one message buys nothing in this case, because the warm read
 never reaches the daemon. Worth reviving only if an open-heavy workload shows
 the cost mattering; the Gollum benchmark's read-path parity suggests it does
-not. Timing `ipc_sync` inside the C daemon is the ~20-line measurement that
-would settle the split.
+not.
+
+That split has since been measured — `ETCFS_IPC_TRACE=1` times each `ipc_sync`
+round trip — and it lands on the removable half: `OPEN` and `RELEASE` cost
+**42–48 us** per hop against a Go handler of 3.6 us, so the hop is nearly all of
+it and the FUSE upcall is the smaller remainder. The conclusion is unchanged
+even so, because what is expensive is not what is removable: both ways of taking
+that hop away are the ones blocked above. Reviving this means solving the
+open-descriptor count first, not measuring again.
 
 ## Pending benchmark work
 
