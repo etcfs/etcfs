@@ -278,6 +278,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "v${VERSION}" dist/*.tar.gz dist/*.deb dist/*.rpm dist/checksums.txt --clobber
 
+      # The runner's default buildx driver is `docker`, which cannot attach
+      # attestations — an SBOM or provenance build against it fails outright
+      # rather than degrading. This sets up the docker-container driver, which
+      # can.
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
       - name: Log in to ghcr.io
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
