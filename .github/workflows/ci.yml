@@ -6,11 +6,11 @@ on:
   pull_request:
     branches: [main, master]
 
+# Read-only by default; the two jobs that publish widen it themselves. Granted
+# at the top instead, every job in the file runs with a token that can write to
+# the repository, including the ones that only lint a checkout.
 permissions:
-  contents: write
-  packages: write
-  issues: write
-  pull-requests: write
+  contents: read
 
 env:
   # The minor go.mod requires, with the patch left to setup-go so it always
@@ -150,6 +150,12 @@ jobs:
         test-integration,
       ]
     if: github.event_name == 'push'
+    # semantic-release creates the tag and the release, and comments on the
+    # issues and pull requests a release closes.
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
     outputs:
       released: ${{ steps.semrel.outputs.new_release_published }}
       version: ${{ steps.semrel.outputs.new_release_version }}

@@ -14,13 +14,21 @@ on:
         required: true
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
+
+env:
+  # See ci.yml: the minor go.mod requires, with the patch left to setup-go so a
+  # rebuilt release carries the current standard library rather than the oldest
+  # patch of its own minor.
+  GO_VERSION: "1.26.x"
 
 jobs:
   release-assets:
     name: Release assets (binaries, packages, containers)
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
     env:
       VERSION: ${{ inputs.version }}
     steps:
@@ -31,7 +39,7 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
 
       - name: Ensure the release exists
         env:
