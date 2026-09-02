@@ -50,7 +50,7 @@ different set of findings — and one built with an older Go than `go.mod`
 targets refuses to run at all, which is how a green hook turns into a red CI.
 
 ```bash
-go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(cat .golangci-version)
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(cat .golangci-version)
 ```
 
 Upgrading it means editing `.golangci-version`; both sides follow.

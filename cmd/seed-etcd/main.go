@@ -108,16 +108,16 @@ func main() {
 			continue
 		}
 
-		// Use AtomicCreateFile for regular files
-		if (e.mode & metadata.S_IFMT) == metadata.ModeDir {
+		switch e.mode & metadata.S_IFMT {
+		case metadata.ModeDir:
 			_, err = store.AtomicCreateDir(ctx, e.parent, e.name, e.ino, e.mode, e.uid, e.gid)
-		} else if (e.mode & metadata.S_IFMT) == metadata.ModeSymlink {
+		case metadata.ModeSymlink:
 			_, err = store.CreateInode(ctx, e.ino, e.mode, e.uid, e.gid)
 			if err == nil {
 				// Store symlink target in inode record
 				_, err = store.Put(ctx, metadata.InodeSymlinkKey(e.ino), []byte(e.target))
 			}
-		} else {
+		default:
 			_, err = store.AtomicCreateFile(ctx, e.parent, e.name, e.ino, e.mode, e.uid, e.gid, metadata.CreateExtra{})
 		}
 		if err != nil {

@@ -253,7 +253,7 @@ func TestLinearizability_BasicCreateDelete(t *testing.T) {
 		ino  uint64
 		name string
 	}
-	var history []historyEntry
+	history := make([]historyEntry, 0, 4)
 
 	// Create
 	_, _ = s.createFile(ctx, 1, "linear", 9200, 0100644)
