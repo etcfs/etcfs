@@ -93,7 +93,7 @@ jobs:
       - name: Coverage summary
         run: go tool cover -func=coverage.out | tail -1
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           files: coverage.out
           token: ${{ secrets.CODECOV_TOKEN }}
