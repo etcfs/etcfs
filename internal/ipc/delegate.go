@@ -194,7 +194,7 @@ func (p *pending) add(cmps []clientv3.Cmp, ops []clientv3.Op, plans []*reclaimPl
 	// already recorded for that key still describes etcd's real state and is
 	// the one the flush must carry.
 	for _, c := range cmps {
-		key := string(c.Key)
+		key := string(c.KeyBytes())
 		if _, owned := p.ops[key]; owned {
 			continue
 		}

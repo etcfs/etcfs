@@ -109,7 +109,15 @@ lint-sh:
 
 fmt: fmt-go fmt-c
 
+# Checked rather than left to the shell: a missing goimports fails as "No such
+# file or directory" against the Makefile line number, which says nothing about
+# what to install.
 fmt-go:
+	@command -v goimports >/dev/null || { \
+		echo "goimports not installed; get it with:"; \
+		echo "  go install golang.org/x/tools/cmd/goimports@latest"; \
+		exit 1; \
+	}
 	goimports -w .
 
 fmt-c:

@@ -52,21 +52,32 @@ pinned_lint="$(cat .golangci-version)"
 # exists precisely to report a missing linter. git surfaces that as a bare
 # "error: failed to push some refs", with every check above it printed OK, which
 # looks like the remote rejecting the push rather than the hook aborting it.
-installed_lint="$(golangci-lint --version 2>/dev/null | grep -o 'v[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1 || true)"
+# The `v` is optional because v2 dropped it: v1 printed "has version v1.64.8",
+# v2 prints "has version 2.13.2". Matching only the prefixed form read a present
+# v2 linter as absent, and the hook then refused a push over a linter that was
+# installed and correct.
+installed_lint="v$(golangci-lint --version 2>/dev/null | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1 || true)"
 if [[ "$installed_lint" != "$pinned_lint" ]]; then
     printf "  %-30s " "golangci-lint"
     echo -e "${RED}FAIL${NC}"
     failures=$((failures + 1))
     echo "  installed ${installed_lint:-none}, CI uses ${pinned_lint} (.golangci-version)"
     echo "  install it with:"
-    echo "    go install github.com/golangci/golangci-lint/cmd/golangci-lint@${pinned_lint}"
+    echo "    go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${pinned_lint}"
     echo ""
 else
     # And it must run under the Go go.mod targets, for the same reason: the
     # linter typechecks against the export data of whichever toolchain is on
     # PATH, and a release built for an older Go cannot read a newer one's, so a
     # newer Go here reports every package as broken while CI is clean.
-    pinned_go="go$(awk '/^go [0-9]/{print $2; exit}' go.mod)"
+    # The toolchain line when there is one, exactly as CI's setup-go resolves
+    # it. Falling back to the `go` line alone is not enough: that line may name
+    # a language version like "1.26", and GOTOOLCHAIN rejects "go1.26" as "a
+    # language version but not a toolchain version".
+    pinned_go="$(awk '/^toolchain go[0-9]/{print $2; exit}' go.mod)"
+    if [[ -z "$pinned_go" ]]; then
+        pinned_go="go$(awk '/^go [0-9]/{print $2; exit}' go.mod)"
+    fi
     run_check "golangci-lint ${pinned_lint}" \
         env GOTOOLCHAIN="$pinned_go" golangci-lint run --timeout=5m ./...
 fi
