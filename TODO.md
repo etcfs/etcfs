@@ -8,13 +8,7 @@ EtcFS wins and loses.
 
 ## Next steps, ranked
 
-**1. Account for `open`.** An `open`+`read` of six bytes costs 208 us against
-ext4's 14.8, while a cached `stat` is 3.6 us against 3.6 and a negative lookup
-4.0 against 4.7 — the caches are doing their job, and this one is not explained
-by them. It is also 25x too fast to be a Raft commit, so the cost is per-open
-work in the daemon or the lock path, on every read.
-
-**2. Put security tooling in CI.** There is none: no `govulncheck`, `gosec`,
+**1. Put security tooling in CI.** There is none: no `govulncheck`, `gosec`,
 CodeQL, Trivy, SBOM, Dependabot or Scorecard anywhere in `.github/`. Ranked by
 value for a root-running FUSE daemon: ASan/UBSan builds of the existing C tests;
 a libFuzzer target for the C request path, which the system-level chaos fuzzers
@@ -22,6 +16,33 @@ do not cover for memory safety; `govulncheck`; pinning Actions to SHAs rather
 than the mutable tags the release pipeline currently trusts to publish binaries,
 packages, containers and the Helm chart; signing releases and attaching
 provenance.
+
+## Deferred
+
+Measured, understood, and parked — not because they do not matter, but because
+what is left to gain is small or is held back by something worth more than the
+gain.
+
+**The cost of `open`.** Was ranked on a 208 us `open`+`read` of six bytes
+against ext4's 14.8, on the theory that the cost was per-open work in the daemon
+or the lock path. Measured on AWS (`m7i.large`, io2 Multi-Attach, one node,
+warm — the lock already cached and the read served from the kernel's page
+cache): 54.2 us total, of which the Go `open` handler is **3.6 us**. So neither
+the daemon nor the lock path explains it, and the gap to ext4 is roughly 4x, not
+the 14x the old number implied. The remaining ~50 us is the FUSE upcall plus the
+C-to-Go IPC hop, and that split has not been measured — it is what decides
+whether anything here is actionable at all, since only the IPC half could ever
+be removed. Both ways of removing it are blocked: answering `open` in the C
+daemon breaks the open-descriptor count that POSIX's unlink-while-open rule
+rests on, which `openFiles.heldOpen` consults inside the unlink transaction
+under the mutex a close takes; and the kernel's zero-message open
+(`FUSE_CAP_NO_OPEN_SUPPORT`) suppresses `release` along with `open`, taking the
+count away entirely and with it the per-open page-cache decision. Folding
+`open`+`read` into one message buys nothing in this case, because the warm read
+never reaches the daemon. Worth reviving only if an open-heavy workload shows
+the cost mattering; the Gollum benchmark's read-path parity suggests it does
+not. Timing `ipc_sync` inside the C daemon is the ~20-line measurement that
+would settle the split.
 
 ## Pending benchmark work
 

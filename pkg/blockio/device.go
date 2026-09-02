@@ -5,6 +5,7 @@ import (
 	"os"
 	"sync/atomic"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
@@ -151,7 +152,9 @@ func (d *Device) ReadAt(buf []byte, offset int64) (int, error) {
 				offset, len(buf), d.sectorSize)
 		}
 	}
+	start := time.Now()
 	n, err := unix.Pread(d.fd, buf, offset)
+	metrics.BlockIODuration.WithLabelValues("read").Observe(time.Since(start).Seconds())
 	metrics.BlockIO.WithLabelValues("read").Inc()
 	// A failed pread returns -1, and a Prometheus counter panics rather than
 	// go backwards — so counting it unconditionally turns every device error
@@ -169,7 +172,9 @@ func (d *Device) WriteAt(buf []byte, offset int64) (int, error) {
 				offset, len(buf), d.sectorSize)
 		}
 	}
+	start := time.Now()
 	n, err := unix.Pwrite(d.fd, buf, offset)
+	metrics.BlockIODuration.WithLabelValues("write").Observe(time.Since(start).Seconds())
 	metrics.BlockIO.WithLabelValues("write").Inc()
 	// See ReadAt: -1 from a failed pwrite would panic the counter.
 	if n > 0 {

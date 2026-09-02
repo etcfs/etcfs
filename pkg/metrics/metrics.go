@@ -179,6 +179,20 @@ var (
 		Help: "Bytes transferred to and from the block device, by direction.",
 	}, []string{"op"})
 
+	// BlockIODuration times individual device reads and writes.
+	//
+	// It exists to answer what the counters above cannot: how much of a FUSE
+	// operation's latency is the device rather than the daemon. A read served
+	// from an already-held lock and a valid snapshot does no etcd work at all,
+	// so the remainder is this and the IPC hop around it — and without a
+	// measurement here the two are indistinguishable. Same buckets as
+	// FuseOpDuration, so the two can be read against each other directly.
+	BlockIODuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "etcfuse_block_io_duration_seconds",
+		Help:    "Block device operation latency, by direction.",
+		Buckets: prometheus.ExponentialBuckets(0.0001, 3, 10),
+	}, []string{"op"})
+
 	// ScrubAnomalies counts anomalies found by the scrubber, by type
 	// (collision, orphan, dead, range, generation, nlink).
 	ScrubAnomalies = promauto.NewCounterVec(prometheus.CounterOpts{
