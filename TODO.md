@@ -8,16 +8,22 @@ EtcFS wins and loses.
 
 ## Next steps, ranked
 
-**1. Finish the security tooling in CI.** A `Security` workflow now runs CodeQL
-over both languages, `govulncheck`, and the C wire tests under ASan and UBSan,
-with Dependabot opening the upgrades. Still owed, in order of value for a
-root-running FUSE daemon: a libFuzzer target for the C request path, which the
-system-level chaos fuzzers do not cover for memory safety; pinning Actions to
-SHAs rather than the mutable tags the release pipeline currently trusts to
-publish binaries, packages, containers and the Helm chart; signing releases and
-attaching provenance; a container scan (Trivy) and an SBOM for the published
-images. Scorecard is worth running once to rank what is left rather than as a
-standing job.
+**1. Decide the Terraform misconfiguration findings.** Scanning is in place and
+reports 21, none of them silenced. They need answers rather than patches:
+encryption at rest on the shared volume and the root devices is the one that
+matters, and adding it forces resource replacement — data loss on the next
+apply against a live cluster — so it needs a migration story, not a commit. The
+EKS module's public endpoint and the open egress rules are deliberate for a
+module meant to stand a cluster up in an empty account, but that is currently a
+decision nobody has written down. Two are cheap and safe: requiring IMDS session
+tokens, which the node bootstrap already uses, and descriptions on the security
+group rules the EKS module leaves bare.
+
+**2. Get an OpenSSF Best Practices badge.** The cheapest remaining Scorecard
+points and the only ones left that are not structural — a self-assessment form,
+no code. Maintained, Contributors and Code-Review cannot move without repo age
+or a second reviewer, which caps a solo project near 8/10; there is no value in
+chasing those.
 
 ## Deferred
 
