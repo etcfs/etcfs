@@ -26,10 +26,8 @@ jobs:
       # different findings, or refuses go.mod's target outright.
       - id: linter
         run: echo "version=$(cat .golangci-version)" >> "$GITHUB_OUTPUT"
-      # Held at action v6: v7 and later require golangci-lint v2, which is a
-      # config-format migration of its own.
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
           version: ${{ steps.linter.outputs.version }}
           args: --timeout=5m

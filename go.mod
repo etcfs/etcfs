@@ -1,8 +1,10 @@
 module github.com/etcfs/etcfs
 
-// Pinned to 1.24: the golangci-lint release CI installs is built with go1.24
-// and refuses a go.mod targeting anything newer.  Raise both together, and keep
-// the prometheus dependencies on versions that still build under it.
+// Raised to 1.25 by the grpc upgrade that carries the fix for GO-2026-6061:
+// grpc v1.82.1 declares go 1.25.0 itself, so this could not stay behind it.
+// The linter moves with this line — a golangci-lint built with an older Go
+// refuses a go.mod targeting a newer one — so .golangci-version is pinned to a
+// release built with 1.25 or later. Raise the two together.
 go 1.25.0
 
 require (

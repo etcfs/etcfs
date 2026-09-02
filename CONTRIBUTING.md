@@ -21,10 +21,27 @@ make fmt          # goimports and clang-format, in place
 make hooks        # install the pre-push hook that runs the checks above
 ```
 
-The pre-push hook runs everything CI does for this repo. Documentation lives
+The pre-push hook runs the lint and test checks above. Documentation lives
 in [etcfs-docs](https://github.com/etcfs/etcfs-docs), which runs its own
 `mkdocs build --strict` and `lychee` link check in CI — send docs changes
 there instead.
+
+A separate `Security` workflow runs on every push and pull request, and again
+weekly so that an advisory published against unchanged code is still reported.
+It runs CodeQL over both languages, `govulncheck` against the Go module, and the
+C wire tests under AddressSanitizer and UndefinedBehaviorSanitizer. The last two
+are worth running locally before sending a change that touches the C daemon or
+adds a dependency:
+
+```bash
+GOTOOLCHAIN=auto go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+mkdir -p bin
+cc -I. -Wall -Wextra -Werror -std=c11 -D_GNU_SOURCE -O1 -g \
+  -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all \
+  test/c/test_ops.c pkg/fuse/fuse.c pkg/block/block.c \
+  -o bin/test-c-asan -lfuse3 -lpthread && ./bin/test-c-asan
+```
 
 `golangci-lint` is pinned rather than optional: the version lives in
 `.golangci-version`, CI installs exactly that, and the hook refuses to pass with
@@ -33,7 +50,7 @@ different set of findings — and one built with an older Go than `go.mod`
 targets refuses to run at all, which is how a green hook turns into a red CI.
 
 ```bash
-go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(cat .golangci-version)
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(cat .golangci-version)
 ```
 
 Upgrading it means editing `.golangci-version`; both sides follow.

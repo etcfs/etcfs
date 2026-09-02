@@ -1,2 +1,6 @@
 [tools]
-go = "1.24.13"
+# At or above go.mod's target, which the grpc upgrade for GO-2026-6061 raised
+# to 1.25: a lower toolchain here cannot build the module at all, and mise's
+# shims resolve every go-installed tool — golangci-lint, goimports — out of
+# this version's bin, so pinning it low silently serves the wrong linter.
+go = "1.27.0"

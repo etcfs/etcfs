@@ -1,0 +1,34 @@
+version: 2
+
+# govulncheck reports a vulnerable dependency; this is what opens the pull
+# request that fixes it. The two are complementary — the scan fails a build
+# that ships a known-vulnerable path, and these keep the tree from drifting far
+# enough for that to be a large upgrade.
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # One pull request for the routine drift, so a genuinely interesting
+      # upgrade is not lost among a dozen patch bumps.
+      minor-and-patch:
+        update-types: [minor, patch]
+
+  # Pinning actions to SHAs is the stronger protection and is still owed; until
+  # then this at least tracks the tags the release pipeline trusts to publish
+  # binaries, packages and containers.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+
+  - package-ecosystem: docker
+    directories:
+      - /deploy/docker
+    schedule:
+      interval: weekly
+      day: monday

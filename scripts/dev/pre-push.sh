@@ -52,14 +52,18 @@ pinned_lint="$(cat .golangci-version)"
 # exists precisely to report a missing linter. git surfaces that as a bare
 # "error: failed to push some refs", with every check above it printed OK, which
 # looks like the remote rejecting the push rather than the hook aborting it.
-installed_lint="$(golangci-lint --version 2>/dev/null | grep -o 'v[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1 || true)"
+# The `v` is optional because v2 dropped it: v1 printed "has version v1.64.8",
+# v2 prints "has version 2.13.2". Matching only the prefixed form read a present
+# v2 linter as absent, and the hook then refused a push over a linter that was
+# installed and correct.
+installed_lint="v$(golangci-lint --version 2>/dev/null | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1 || true)"
 if [[ "$installed_lint" != "$pinned_lint" ]]; then
     printf "  %-30s " "golangci-lint"
     echo -e "${RED}FAIL${NC}"
     failures=$((failures + 1))
     echo "  installed ${installed_lint:-none}, CI uses ${pinned_lint} (.golangci-version)"
     echo "  install it with:"
-    echo "    go install github.com/golangci/golangci-lint/cmd/golangci-lint@${pinned_lint}"
+    echo "    go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${pinned_lint}"
     echo ""
 else
     # And it must run under the Go go.mod targets, for the same reason: the
