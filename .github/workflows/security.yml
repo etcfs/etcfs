@@ -36,9 +36,9 @@ jobs:
       matrix:
         language: [go, c-cpp]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         if: matrix.language == 'go'
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -51,7 +51,7 @@ jobs:
         run: sudo apt-get install -y libfuse3-dev
 
       - name: Initialise CodeQL
-        uses: github/codeql-action/init@v4
+        uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
         with:
           languages: ${{ matrix.language }}
           # security-extended adds the rules that are worth the false-positive
@@ -71,7 +71,7 @@ jobs:
           fi
 
       - name: Analyse
-        uses: github/codeql-action/analyze@v4
+        uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
         with:
           category: /language:${{ matrix.language }}
 
@@ -79,8 +79,8 @@ jobs:
     name: govulncheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: ${{ env.GO_VERSION }}
       # GOTOOLCHAIN=auto for the same reason the release job needs it: this
@@ -93,7 +93,7 @@ jobs:
     name: C tests (ASan + UBSan)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Install deps
         run: sudo apt-get install -y libfuse3-dev
 
@@ -116,3 +116,37 @@ jobs:
           ASAN_OPTIONS: detect_leaks=1:strict_string_checks=1:detect_stack_use_after_return=1
           UBSAN_OPTIONS: print_stacktrace=1
         run: ./bin/test-c-asan
+
+  trivy:
+    name: Trivy (filesystem + config)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # Scans the tree rather than a published image: the images are built only
+      # on a release, and a finding is worth having before that rather than
+      # after. `config` covers the Dockerfiles and the Kubernetes manifests,
+      # which nothing else here looks at — govulncheck sees Go dependencies and
+      # says nothing about a container running as root or a manifest without
+      # limits.
+      - name: Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scanners: vuln,secret,misconfig
+          format: sarif
+          output: trivy.sarif
+          # Reported, not enforced: this runs against every push, and a new
+          # advisory in a transitive dependency should open a finding rather
+          # than stop a merge that has nothing to do with it. govulncheck is
+          # the one that fails the build, because it proves reachability.
+          exit-code: "0"
+
+      - name: Upload results
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
+        with:
+          sarif_file: trivy.sarif
+          category: trivy
