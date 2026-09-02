@@ -6,7 +6,10 @@
 #
 # Multi-stage: compile in golang image, copy into minimal runtime.
 
-FROM golang:1.24-alpine AS builder
+# Must stay at or above go.mod's `go` directive: the image sets
+# GOTOOLCHAIN=local, so a builder below it fails outright rather than fetching
+# what the module asks for.
+FROM golang:1.25-alpine AS builder
 
 RUN apk add --no-cache git
 

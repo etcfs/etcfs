@@ -7,6 +7,14 @@ module github.com/etcfs/etcfs
 // release built with 1.25 or later. Raise the two together.
 go 1.25.0
 
+// The line above is the minimum this module compiles against; this is the
+// toolchain it is actually built with, and the two are not the same statement.
+// Left unset, CI's setup-go installs exactly the `go` line — 1.25.0, the oldest
+// 1.25 patch — and govulncheck then reports every standard-library advisory
+// fixed since, 33 of them, none of them in this repo's own code or its
+// dependencies. Raise this to the current patch when that happens again.
+toolchain go1.25.13
+
 require (
 	github.com/anishathalye/porcupine v1.3.0
 	github.com/aws/aws-sdk-go-v2 v1.43.3
