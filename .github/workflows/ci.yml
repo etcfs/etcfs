@@ -12,6 +12,17 @@ permissions:
   issues: write
   pull-requests: write
 
+env:
+  # The minor go.mod requires, with the patch left to setup-go so it always
+  # installs the newest one. Pointing at go.mod instead pins the exact version
+  # written there — the oldest patch of the release — and govulncheck then
+  # reports every standard-library advisory fixed since against a build nobody
+  # would ship; that is what put 33 findings on a green tree. Dependabot cannot
+  # take this over: updating a `toolchain` directive and reading a .go-version
+  # file are both open feature requests, so the resolution is left to the action
+  # rather than to a version someone has to remember to bump.
+  GO_VERSION: "1.26.x"
+
 jobs:
   lint-go:
     name: Lint (Go)
@@ -20,7 +31,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
       # The version lives in .golangci-version so CI and the pre-push hook
       # install the same linter; a local one built with a different Go reports
       # different findings, or refuses go.mod's target outright.
@@ -62,7 +73,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
       - name: Build
         run: go build ./cmd/etcfuse-meta
 
@@ -87,7 +98,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
       - name: Test
         run: go test -race -count=1 -coverprofile=coverage.out -covermode=atomic ./...
       - name: Coverage summary
@@ -107,7 +118,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
       - name: Start etcd
         run: |
           curl -sL https://github.com/etcd-io/etcd/releases/download/v3.5.18/etcd-v3.5.18-linux-amd64.tar.gz | tar xz
@@ -155,7 +166,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
 
       - name: Run semantic-release
         id: semrel
@@ -184,13 +195,12 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
 
       # GOTOOLCHAIN=auto, not the job-wide `local` setup-go pins: nfpm's go.mod
-      # requires a newer Go than go.mod's 1.24 (itself pinned for
-      # golangci-lint compat, see go.mod). `local` refuses to fetch it and
-      # fails the install outright; `auto` downloads the toolchain nfpm
-      # needs for this one command without touching go.mod.
+      # may require a newer Go than the one installed above. `local` refuses to
+      # fetch it and fails the install outright; `auto` downloads the toolchain
+      # nfpm needs for this one command without touching go.mod.
       - name: Install nfpm
         run: GOTOOLCHAIN=auto go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2
 

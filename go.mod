@@ -7,12 +7,12 @@ module github.com/etcfs/etcfs
 // two together.
 go 1.26
 
-// The line above is the minimum this module compiles against; this is the
-// toolchain it is actually built with, and the two are not the same statement.
-// Left unset, CI's setup-go installs exactly the `go` line — the oldest patch
-// of that release — and govulncheck then reports every standard-library
-// advisory fixed since, none of them in this repo's own code or its
-// dependencies. Raise this to the current patch when that happens again.
+// A floor for whoever builds this by hand, not what CI uses: the workflows
+// name the minor and let setup-go pick the newest patch (GO_VERSION in
+// ci.yml), so this going stale no longer makes govulncheck report standard
+// library advisories that a current toolchain has already fixed. Nothing
+// updates it automatically — Dependabot supports neither the `toolchain`
+// directive nor a .go-version file — so treat it as a minimum, not a pin.
 toolchain go1.26.6
 
 require (

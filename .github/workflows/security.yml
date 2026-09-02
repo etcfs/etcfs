@@ -17,6 +17,13 @@ on:
 permissions:
   contents: read
 
+env:
+  # See ci.yml: the minor go.mod requires, with the patch left to setup-go.
+  # It matters most here — govulncheck reports against whatever standard
+  # library it was built with, so pinning the oldest patch makes it report
+  # advisories that a current toolchain has already fixed.
+  GO_VERSION: "1.26.x"
+
 jobs:
   codeql:
     name: CodeQL (${{ matrix.language }})
@@ -34,7 +41,7 @@ jobs:
       - uses: actions/setup-go@v7
         if: matrix.language == 'go'
         with:
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
 
       # The C daemon links libfuse3, so the build CodeQL traces has to be able
       # to find its headers; without them the C analysis silently covers
@@ -75,10 +82,10 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
       # GOTOOLCHAIN=auto for the same reason the release job needs it: this
-      # tool's own go.mod targets a newer Go than go.mod pins for
-      # golangci-lint compatibility, and `local` refuses to fetch it.
+      # tool's own go.mod may target a newer Go than the one installed above,
+      # and `local` refuses to fetch it.
       - name: Run govulncheck
         run: GOTOOLCHAIN=auto go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
