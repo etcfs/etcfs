@@ -170,7 +170,7 @@ func (s *MockStore) evalCmps(cmps []clientv3.Cmp) bool {
 
 // cmpMatches checks if the given comparison holds for a key-value pair.
 func cmpMatches(cmp clientv3.Cmp, key string, val []byte) bool {
-	target := int32(cmp.Target)
+	target := int32(cmp.GetCompare().Target)
 	// 1 = Compare_CREATE (CreateRevision).  "= 0" means key absent.
 	if target == 1 {
 		return val == nil
