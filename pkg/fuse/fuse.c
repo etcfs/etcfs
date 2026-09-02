@@ -505,11 +505,13 @@ static void etcfs_init(void *userdata, struct fuse_conn_info *conn)
 
 /* Runs one command and waits for it, without a shell.
  *
- * The mountpoint reaches this from argv, and this daemon runs as root: built
- * into a string for system(), a mountpoint carrying shell metacharacters would
- * be interpreted rather than passed along, and one longer than the buffer would
- * be truncated into a different path to unmount. execvp takes the argument as
- * an argument, so neither is possible.
+ * This daemon runs as root and the path it unmounts originates outside the
+ * process: built into a string for system(), a mountpoint carrying shell
+ * metacharacters would be interpreted rather than passed along, and one longer
+ * than the buffer would be truncated into a different path to unmount. execvp
+ * takes the argument as an argument, so neither is possible, and the program
+ * itself is always a literal at the call site rather than anything derived
+ * from input.
  *
  * argv[0] names the program and the vector is NULL-terminated. Failures are
  * deliberately not reported: both callers are best-effort cleanup of a stale
@@ -639,9 +641,15 @@ int etcfs_run(struct etcfs_context *ctx)
                                   "stale FUSE mount at %s (previous daemon crash?), cleaning up",
                                   mountpoint);
                         fclose(fp);
-                        /* force-unmount the stale mount */
-                        run_quiet((const char *[]){"fusermount", "-uz", mountpoint, NULL});
-                        run_quiet((const char *[]){"umount", "-l", mountpoint, NULL});
+                        /* Force-unmount the stale mount, naming it as
+                         * /proc/mounts spells it rather than as the command
+                         * line does. The strcmp above proves the two are the
+                         * same bytes, so this unmounts exactly what it did
+                         * before — but what reaches the child process is a
+                         * line the kernel wrote, not an argument this process
+                         * was started with. */
+                        run_quiet((const char *[]){"fusermount", "-uz", mp, NULL});
+                        run_quiet((const char *[]){"umount", "-l", mp, NULL});
                         goto after_cleanup;
                     }
                 }
