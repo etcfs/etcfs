@@ -27,7 +27,7 @@ jobs:
       - id: linter
         run: echo "version=$(cat .golangci-version)" >> "$GITHUB_OUTPUT"
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v9
         with:
           version: ${{ steps.linter.outputs.version }}
           args: --timeout=5m
