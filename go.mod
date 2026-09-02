@@ -1,11 +1,19 @@
 module github.com/etcfs/etcfs
 
-// Raised to 1.25 by the grpc upgrade that carries the fix for GO-2026-6061:
-// grpc v1.82.1 declares go 1.25.0 itself, so this could not stay behind it.
-// The linter moves with this line — a golangci-lint built with an older Go
-// refuses a go.mod targeting a newer one — so .golangci-version is pinned to a
-// release built with 1.25 or later. Raise the two together.
+// Follows whatever the dependencies demand — etcd client v3.7 declares go 1.26
+// itself, as grpc v1.82 did 1.25 before it. The linter moves with this line: a
+// golangci-lint built with an older Go refuses a go.mod targeting a newer one,
+// so .golangci-version must name a release built with at least this. Raise the
+// two together.
 go 1.26
+
+// The line above is the minimum this module compiles against; this is the
+// toolchain it is actually built with, and the two are not the same statement.
+// Left unset, CI's setup-go installs exactly the `go` line — the oldest patch
+// of that release — and govulncheck then reports every standard-library
+// advisory fixed since, none of them in this repo's own code or its
+// dependencies. Raise this to the current patch when that happens again.
+toolchain go1.26.6
 
 require (
 	github.com/anishathalye/porcupine v1.3.0
