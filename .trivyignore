@@ -1,0 +1,29 @@
+# Trivy findings that are deliberate here, with the reason recorded in the repo
+# rather than dismissed in the GitHub UI where a reviewer cannot see it.
+#
+# Re-examine both of these if the daemons ever stop needing root, or if an image
+# in this repository starts serving something that is not a filesystem.
+
+# DS-0002 — "Specify at least 1 USER command in Dockerfile".
+#
+# Both daemons require root and cannot be made to run as anything else:
+# etcfuse mounts a FUSE filesystem with allow_other and default_permissions,
+# which the kernel refuses to a non-root process unless user_allow_other is set
+# in /etc/fuse.conf; and etcfuse-meta opens the shared block device O_DIRECT and
+# issues the NVMe reservation commands the fencing protocol depends on. A USER
+# line would produce an image that cannot mount, not a safer one. The
+# deployment manifests are where this is contained, by giving the pods only the
+# capabilities those two things need.
+DS-0002
+
+# DS-0026 — "Add HEALTHCHECK instruction in your Dockerfile".
+#
+# Liveness for these is decided outside the image and has to be: a node is
+# healthy when its etcd lease is still being renewed and its mount still
+# answers, and neither is visible from inside the container. The self-fencing
+# watchdog is what acts on the first, and it exits the process rather than
+# reporting a status. A HEALTHCHECK would give the container runtime a second,
+# weaker opinion about whether a node should be restarted — and restarting a
+# node that still holds inode locks is what the fencing protocol exists to make
+# safe, not something to trigger on a missed probe.
+DS-0026

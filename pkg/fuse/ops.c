@@ -17,6 +17,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <fuse3/fuse_lowlevel.h>
@@ -104,9 +105,44 @@ static int recv_full(int fd, void *buf, size_t len)
 
 /* ---- synchronous IPC ---- */
 
+/*
+ * Times the round trip to the metadata daemon when ETCFS_IPC_TRACE is set in
+ * the environment, and costs nothing when it is not.
+ *
+ * It exists to split a number the daemon's own metrics cannot reach. An
+ * operation's latency is the FUSE upcall from the kernel, plus this hop to the
+ * Go daemon and back, plus the handler at the far end — and only the handler is
+ * measured, by etcfuse_fuse_op_duration_seconds. Subtracting both from the
+ * end-to-end time is what says whether the cost of an operation is the upcall,
+ * which nothing in this process can remove, or this hop, which folding requests
+ * together could.
+ *
+ * Per call rather than aggregated: a mount serving a benchmark writes a lot of
+ * these, and the distribution is the interesting part. Aggregate them from the
+ * log.
+ */
+static int ipc_trace_enabled(void)
+{
+    /* Read once. The race between two threads doing this at the same time is
+     * benign: they compute the same answer from the same environment. */
+    static int enabled = -1;
+    if (enabled < 0)
+        enabled = getenv("ETCFS_IPC_TRACE") != NULL;
+    return enabled;
+}
+
+static uint64_t monotonic_ns(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t) ts.tv_sec * 1000000000ULL + (uint64_t) ts.tv_nsec;
+}
+
 static int ipc_sync(int fd, uint16_t op, const uint8_t *payload, uint32_t plen, uint8_t **resp,
                     uint32_t *rlen)
 {
+    int traced = ipc_trace_enabled();
+    uint64_t started = traced ? monotonic_ns() : 0;
     uint8_t hdr[6];
     hdr[0] = (uint8_t) (op >> 8);
     hdr[1] = (uint8_t) op;
@@ -142,6 +178,9 @@ static int ipc_sync(int fd, uint16_t op, const uint8_t *payload, uint32_t plen, 
     }
     *resp = rb;
     *rlen = rl;
+    if (traced)
+        etcfs_log(ETCFS_LOG_DEBUG, "ipc op=%u took %llu ns", (unsigned) op,
+                  (unsigned long long) (monotonic_ns() - started));
     return 0;
 
     /*
