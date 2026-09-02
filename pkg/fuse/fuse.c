@@ -11,6 +11,7 @@
 #include "../block/block.h"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -18,6 +19,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <pthread.h>
 
@@ -501,6 +503,41 @@ static void etcfs_init(void *userdata, struct fuse_conn_info *conn)
                   "directory listings will not be cached");
 }
 
+/* Runs one command and waits for it, without a shell.
+ *
+ * The mountpoint reaches this from argv, and this daemon runs as root: built
+ * into a string for system(), a mountpoint carrying shell metacharacters would
+ * be interpreted rather than passed along, and one longer than the buffer would
+ * be truncated into a different path to unmount. execvp takes the argument as
+ * an argument, so neither is possible.
+ *
+ * argv[0] names the program and the vector is NULL-terminated. Failures are
+ * deliberately not reported: both callers are best-effort cleanup of a stale
+ * mount, and whether it worked is decided by the mount retry that follows. */
+static void run_quiet(const char *argv[])
+{
+    pid_t pid = fork();
+    if (pid < 0)
+        return;
+
+    if (pid == 0) {
+        /* stderr to /dev/null, as the shell redirect these calls replaced did:
+         * unmounting a mountpoint that turns out not to be stale is an
+         * expected outcome, not something to print. */
+        int devnull = open("/dev/null", O_WRONLY);
+        if (devnull >= 0) {
+            dup2(devnull, STDERR_FILENO);
+            close(devnull);
+        }
+        execvp(argv[0], (char *const *) argv);
+        _exit(127);
+    }
+
+    int status;
+    while (waitpid(pid, &status, 0) < 0 && errno == EINTR)
+        ;
+}
+
 /* ---- main entry ---- */
 
 int etcfs_run(struct etcfs_context *ctx)
@@ -603,17 +640,8 @@ int etcfs_run(struct etcfs_context *ctx)
                                   mountpoint);
                         fclose(fp);
                         /* force-unmount the stale mount */
-                        char cmd[512];
-                        snprintf(cmd, sizeof(cmd), "fusermount -uz %s 2>/dev/null", mountpoint);
-                        {
-                            int rc = system(cmd);
-                            (void) rc;
-                        }
-                        snprintf(cmd, sizeof(cmd), "umount -l %s 2>/dev/null", mountpoint);
-                        {
-                            int rc = system(cmd);
-                            (void) rc;
-                        }
+                        run_quiet((const char *[]){"fusermount", "-uz", mountpoint, NULL});
+                        run_quiet((const char *[]){"umount", "-l", mountpoint, NULL});
                         goto after_cleanup;
                     }
                 }
