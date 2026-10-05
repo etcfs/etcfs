@@ -13,8 +13,8 @@ import (
 )
 
 // Inode numbers are handed out from a block reserved in etcd, so the property
-// that matters is the one the counter used to give for free: no number is ever
-// handed out twice, on one node or across two.
+// that matters is the one a commit per number would give for free: no number is
+// ever handed out twice, on one node or across two.
 
 func TestIntegration_InodeBlockNumbersAreUnique(t *testing.T) {
 	store := metadata.NewStore(etcdtest.Client(t), "node-a")

@@ -26,7 +26,7 @@ func (s *Store) NextCounter(ctx context.Context, key string, floor uint64) (uint
 // hand out, so a reader can always take the stored value as-is.
 //
 // Reserving a run is what takes the counter off the critical path of a create.
-// One commit per number made every file creation wait on Raft twice — once for
+// One commit per number would make every file creation wait on Raft twice — once for
 // the number and once for the entry naming it — and the numbers are 64-bit, so
 // the run a node dies holding is stranded at no cost anyone can measure.  The
 // key therefore counts numbers handed *out*, not files alive, which is what
@@ -35,9 +35,9 @@ func (s *Store) NextCounter(ctx context.Context, key string, floor uint64) (uint
 // The CAS is retried on contention with the same jittered backoff every
 // read-modify-write here uses (casBackoff) — without jitter, callers that lose
 // a race tend to have started their retry in lockstep and collide again on the
-// same tick, which is what let 16 concurrent callers exhaust an 8-attempt
-// budget with only 9 successes in
-// TestIntegration_CounterIsUniqueUnderConcurrency.  A missing key is compared
+// same tick; measured without it, 16 concurrent callers in
+// TestIntegration_CounterIsUniqueUnderConcurrency exhaust an 8-attempt budget
+// with only 9 successes.  A missing key is compared
 // on CreateRevision rather than value, because a value comparison against a
 // key that does not exist never matches.
 func (s *Store) ReserveCounter(ctx context.Context, key string, floor, count uint64) (uint64, error) {

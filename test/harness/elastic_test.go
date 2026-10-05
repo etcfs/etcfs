@@ -271,13 +271,15 @@ func TestElastic_MultipleJoinLeaveCycles(t *testing.T) {
 // regression here is caught by `go test ./...` rather than only by someone
 // remembering to run the chaos script.
 //
-// Scope note: this asserts arena disjointness only. Inode allocation
-// is a single global CAS-retried counter (Service.allocInode ->
-// Store.NextCounter), which is a method on *metadata.Store and so is not
-// reachable from MockStore; concurrent inode allocation therefore has no
-// harness-level coverage and is exercised only by
+// Scope note: this asserts arena disjointness only. Inode numbers come from
+// blocks of 1,024 reserved on a global CAS-retried counter (Service.allocInode
+// -> inodeBlocks.reserve -> Store.ReserveCounter), which is a method on
+// *metadata.Store and so is not reachable from MockStore; concurrent inode
+// allocation therefore has no harness-level coverage. It is exercised against
+// real etcd by internal/ipc/inodealloc_integration_test.go (uniqueness on one
+// node, disjoint blocks across two, concurrent reservations), by
 // pkg/metadata/integration_test.go's TestIntegration_CounterIsUniqueUnderConcurrency
-// against real etcd, and by the chaos script's 20-way concurrent create.
+// for the counter itself, and by the chaos script's 20-way concurrent create.
 func TestElastic_ConcurrentJoin(t *testing.T) {
 	cluster := NewCluster(1)
 	ctx := t.Context()
