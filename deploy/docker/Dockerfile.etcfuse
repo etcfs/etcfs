@@ -6,7 +6,7 @@
 # Uses a multi-stage build: compile in a builder image, then copy
 # the static binary into a minimal runtime image.
 
-FROM amazonlinux:2023 AS builder
+FROM amazonlinux:2023.12.20260918.0 AS builder
 
 RUN dnf install -y gcc make fuse3-devel fuse3-libs && dnf clean all
 
@@ -16,7 +16,7 @@ COPY pkg/ pkg/
 
 RUN make -C cmd/etcfuse
 
-FROM amazonlinux:2023
+FROM amazonlinux:2023.12.20260918.0
 
 # libfuse shells out to /bin/mount (util-linux) rather than calling mount(2)
 # itself, so a runtime image without it fails fuse_session_mount with ENOENT
