@@ -18,9 +18,9 @@ import (
 // Write delegation: publishing an inode's extents is deferred while this node
 // holds its exclusive lock.
 //
-// A write used to cost one device I/O plus one Raft commit, and the commit is
-// the larger of the two by roughly a factor of two.  It does not have to be
-// there: while this node holds an inode's exclusive lock no peer can take even
+// Published at once, a write costs one device I/O plus one Raft commit, and the
+// commit is the larger of the two by roughly a factor of two.  It does not have
+// to be there: while this node holds an inode's exclusive lock no peer can take even
 // a shared one, so no peer can observe the gap between the bytes landing on the
 // device and the extent naming them appearing in etcd.  The extent record is
 // buffered in the lock entry instead and published in batches.
@@ -315,9 +315,9 @@ func (s *Service) bufferWrite(ctx context.Context, e *lockEntry, replay *txnRepl
 //
 // Process-wide rather than per-entry because that is the number that matters in
 // both uses: it is what a crash would lose right now, and it is what bounds the
-// RAM these buffers may occupy.  The gauges used to be set from whichever inode
-// was last written, so with more than one inode buffering they described no
-// real quantity at all.
+// RAM these buffers may occupy.  Set from whichever inode was last written, the
+// gauges would describe no real quantity once more than one inode is
+// buffering.
 func (s *Service) bufferAccounted(ops int, bytes int64) {
 	totalOps := s.bufferedOps.Add(int64(ops))
 	totalBytes := s.bufferedBytes.Add(bytes)

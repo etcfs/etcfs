@@ -73,9 +73,9 @@ func retryDelay(attempt int) time.Duration {
 // retry runs fn until it succeeds or the attempt budget is spent, returning
 // the last error.
 //
-// The pause between attempts honours ctx: a request whose deadline has already
-// passed used to sit out the full backoff before noticing, holding the FUSE
-// request open for a reply it was never going to give.
+// The pause between attempts honours ctx: otherwise a request whose deadline
+// has already passed would sit out the full backoff before noticing, holding the
+// FUSE request open for a reply it was never going to give.
 func retry(ctx context.Context, attempts int, fn func() error) error {
 	var err error
 	for attempt := 0; attempt < attempts; attempt++ {
@@ -273,10 +273,10 @@ func (l *heldLock) Release() {
 // etcd key that excludes the other nodes — which is usually already there,
 // cached from an earlier operation on the same inode.
 //
-// The local wait is bounded rather than blocking. Two threads on one node
-// contending for the same inode used to collide in etcd and get EAGAIN after
-// the retry budget; keeping that shape means a pathologically slow holder
-// still cannot pin a FUSE request open indefinitely.
+// The local wait is bounded rather than blocking: a thread that cannot take the
+// entry within the retry budget gets EAGAIN, the same answer an etcd-side
+// conflict gives, so a pathologically slow holder cannot pin a FUSE request open
+// indefinitely.
 func (s *Service) lockInode(ctx context.Context, ino uint64, mode metadata.LockMode) (*heldLock, error) {
 	call := time.Now()
 

@@ -9,11 +9,11 @@ import (
 
 // Inode number allocation.
 //
-// A number used to cost a read and a Raft commit of its own, taken before the
-// transaction that created the file — so every create waited on Raft twice for
-// what is, in the end, a counter.  The counter is now reserved a block at a
-// time and handed out from memory, which leaves one commit on the create path:
-// the one that publishes the file.
+// Taking each number with a read and a Raft commit of its own, before the
+// transaction that creates the file, would make every create wait on Raft twice
+// for what is, in the end, a counter.  The counter is therefore reserved a block
+// at a time and handed out from memory, which leaves one commit on the create
+// path: the one that publishes the file.
 //
 // The cost is that a node which stops holding a partly used block strands the
 // rest of it.  Inode numbers are 64-bit and nothing reuses them anyway, so a

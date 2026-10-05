@@ -12,11 +12,11 @@ import (
 // writeOp is one WRITE in progress: the blocks it reserved, the metadata it
 // planned against, and the proposal it built from the two.
 //
-// The stages used to be closures inside one function, threading this state
-// between them by capture. They are the same stages — reserve and pad, put the
-// bytes on the device, build the transaction — but each is now nameable,
-// separately readable, and can be re-run on a retry without the reader having
-// to track which captured variable the previous attempt left behind.
+// The stages — reserve and pad, put the bytes on the device, build the
+// transaction — are methods rather than closures sharing state by capture, so
+// each is nameable, separately readable, and can be re-run on a retry without
+// the reader having to track which captured variable the previous attempt left
+// behind.
 type writeOp struct {
 	s      *Service
 	ino    uint64
@@ -180,10 +180,10 @@ func (w *writeOp) readExtents(ctx context.Context, opts ...clientv3.OpOption) er
 //
 // Everything this write does to metadata goes into this one transaction: the
 // new extents, the size change, and the rewrite of every extent the write
-// buries. Each of those used to be its own round trip after the commit, and
-// each was a Raft commit on the critical path of every write. Folding them also
-// makes the write atomic in a way it was not: a buried extent stops being
-// referenced at the same revision the extent burying it appears.
+// buries. As separate round trips after the commit, each would be a Raft commit
+// on the critical path of every write. Folding them also makes the write
+// atomic: a buried extent stops being referenced at the same revision the
+// extent burying it appears.
 func (w *writeOp) proposal() ([]clientv3.Cmp, []clientv3.Op) {
 	cmps := make([]clientv3.Cmp, 0, len(w.runs))
 	ops := make([]clientv3.Op, 0, len(w.runs)+2)

@@ -221,7 +221,7 @@ func TestController_SweepDropsIntentWhenNodeRejoins(t *testing.T) {
 }
 
 // The race half of the gap: every survivor sees the same DELETE event, so
-// dedup has to be cluster-wide, not the per-process map it used to be.
+// dedup has to be cluster-wide; a per-process map would let each survivor fence.
 func TestController_ConcurrentControllersFenceOnce(t *testing.T) {
 	c1, store, ctx := testController(t, "survivor-1")
 	c2, _, _ := testController(t, "survivor-2")
@@ -456,10 +456,10 @@ func TestController_AbandonsFenceWhenNodeLeftAndReturned(t *testing.T) {
 
 // The departure protocol.
 //
-// A node that shuts down on purpose used to be indistinguishable from one that
-// crashed — etcd reports an explicit lease revoke and a lease that timed out as
-// the same delete — so the cluster severed its device access on the way out and
-// it could not simply be restarted. These pin the three things that make
+// Without a marker, a node that shuts down on purpose is indistinguishable from
+// one that crashed — etcd reports an explicit lease revoke and a lease that
+// timed out as the same delete — so the cluster would sever its device access on
+// the way out and it could not simply be restarted. These pin the three things that make
 // skipping that fence safe.
 
 // A node that released everything and announced its departure is left alone.

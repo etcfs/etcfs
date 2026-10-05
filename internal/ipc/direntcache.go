@@ -13,7 +13,7 @@ import (
 //
 // A build probing an include path, a package manager looking for an optional
 // config, a linker walking a library search path: all of them ask for names
-// that mostly do not exist, and each of those questions used to be a
+// that mostly do not exist, and answered directly each of those questions is a
 // linearizable point read of etcd.  The kernel caches the *answer* — a negative
 // entry is cacheable, see negativeEntryResp — but only after it has been asked
 // once, and a fresh directory of a thousand absent names costs a thousand round

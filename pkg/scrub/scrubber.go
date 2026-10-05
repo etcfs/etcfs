@@ -339,10 +339,10 @@ const maxAnomalies = 1000
 
 // Snapshot is everything one scrub pass reads, gathered once.
 //
-// Each check used to scan the key space it needed for itself, so a pass read
-// the whole extent space five times and the inode space twice, and the orphan
-// check additionally issued one Get per extent to ask whether its inode
-// existed — a question the inode scan already answers.
+// Gathered once rather than per check: with each check scanning the key space
+// it needs for itself, a pass would read the whole extent space five times and
+// the inode space twice, and the orphan check would issue one Get per extent to
+// ask whether its inode exists — a question the inode scan already answers.
 type Snapshot struct {
 	Extents []metadata.Extent
 	// Inodes holds every inode record, by inode number.
@@ -550,9 +550,9 @@ func deadReason(ext metadata.Extent, size uint64, siblings []metadata.Extent) st
 
 // CheckRangeValidity detects extents that do not fit on the device.
 //
-// Skipped entirely when the device size is unknown: the previous version
-// compared against a hardcoded 1 TiB, which was neither the device's size nor
-// the limit fsck used.
+// Skipped entirely when the device size is unknown, rather than run against a
+// hardcoded ceiling that would be neither the device's size nor the limit fsck
+// uses.
 func (s *Scrubber) CheckRangeValidity(snap *Snapshot) []Result {
 	return CheckRangeValidity(snap, s.deviceSize)
 }
@@ -591,9 +591,9 @@ func CheckRangeValidity(snap *Snapshot, deviceSize uint64) []Result {
 //
 // It deliberately does *not* flag extents stamped below the current generation.
 // Those are simply older than the node's last fence, which is what every extent
-// written before a fence looks like.  The check used to compare against the
-// maximum generation across the whole cluster, so one node ever being fenced
-// turned every extent written by every other node into an anomaly.
+// written before a fence looks like.  Comparing against the maximum generation
+// across the whole cluster instead would turn every extent written by every
+// other node into an anomaly the moment any one node was fenced.
 func (s *Scrubber) CheckGenerationConsistency(snap *Snapshot) []Result {
 	return CheckGenerationConsistency(snap)
 }
@@ -643,8 +643,8 @@ func CheckNlinkConsistency(snap *Snapshot) []Result {
 // Nothing can reach such an inode: it does not appear in any listing, and its
 // extents are invisible to the orphan check, which looks for extents whose
 // inode is *missing* rather than unreachable.  Every creating operation is a
-// single transaction, so this should never appear; when it does, it is either a
-// leak from an older write path or genuine corruption.
+// single transaction, so this should never appear; when it does, it is
+// corruption or a manual edit.
 //
 // It is reported, never auto-fixed.  Deleting an inode is not reversible, and
 // the blocks behind it are reclaimed by the orphan check once it goes — so an
@@ -671,21 +671,14 @@ func CheckUnreferencedInodes(snap *Snapshot) []Result {
 	return results
 }
 
-// expectedNlink is the link count an inode should carry given how many dirents
-// point at it.
-//
-// For a directory the answer is fixed rather than counted. Directories cannot
-// be hard-linked, and this filesystem does not model the ".." link each
-// subdirectory would contribute to its parent, so every directory keeps the
-// count it was created with — counting dirents instead would flag every
-// directory in the filesystem.
-// expectedNlink is what an inode's link count should read.
+// expectedNlink is what an inode's link count should read: its dirent count for
+// a file, and for a directory 2 plus its subdirectories.
 //
 // A directory is referred to by its own ".", by its entry in its parent, and by
 // the ".." of every subdirectory it holds. The first two are the 2 it is
-// created with; the third is why the count moves at all. A filesystem written
-// before directory counts were maintained reports 2 everywhere, so this check
-// is also what finds those, and fsck is what repairs them.
+// created with; the third is why the count moves at all. Counting the dirents
+// that name a directory instead would flag every directory in the filesystem,
+// since a directory has exactly one. A mismatch is reported, not repaired.
 func expectedNlink(rec *metadata.InodeRecord, dirents, subdirs uint32) uint32 {
 	if rec.Mode&metadata.S_IFMT == metadata.ModeDir {
 		return metadata.InitialNlink(rec.Mode) + subdirs

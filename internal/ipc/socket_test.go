@@ -26,8 +26,7 @@ func TestAttrBlockMatchesCDaemonWidth(t *testing.T) {
 //
 // The layouts are hand-encoded twice — buf/reader here, wb_*/rb_* in
 // pkg/fuse/ops.c — so a field added on one side only shifts every field after
-// it on the other, silently. Three replies used to be pinned this way and the
-// rest were unguarded; this covers all of them. The wanted numbers are written
+// it on the other, silently. This covers every fixed-width reply. The wanted numbers are written
 // as the sum of the C reads, in reply order, so a diff shows which field moved
 // rather than only that a total changed.
 //

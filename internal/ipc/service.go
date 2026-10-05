@@ -145,11 +145,12 @@ const DefaultFlushInterval = defaultFlushInterval
 // Options is everything about a Service that is decided once, before it serves
 // anything, and never again.
 //
-// These used to be six setters called on a constructed Service. Nothing made
-// them run before the socket started accepting, and each stayed writable for
-// the process's lifetime — so "is the page cache on?" was a question with no
-// answer that held. Passing them here makes the configuration a property of the
-// Service rather than a sequence of calls someone has to get right.
+// They are passed here rather than set on a constructed Service, because
+// setters would not be guaranteed to run before the socket starts accepting, and
+// each would stay writable for the process's lifetime — so "is the page cache
+// on?" would have no answer that holds. Passing them here makes the
+// configuration a property of the Service rather than a sequence of calls
+// someone has to get right.
 //
 // Every field means exactly what it says: a zero FlushInterval commits each
 // write before acknowledging it rather than selecting a default.

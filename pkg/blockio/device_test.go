@@ -190,7 +190,7 @@ func TestFailedIODoesNotPanicTheByteCounter(t *testing.T) {
 	defer func() { _ = FreeBuffer(buf) }()
 
 	// Closing the device makes every subsequent syscall fail on a bad fd,
-	// which is the -1 the counter used to be handed.
+	// returning -1, which the counter must not be handed.
 	require.NoError(t, dev.Close())
 
 	require.NotPanics(t, func() {

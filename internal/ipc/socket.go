@@ -58,9 +58,9 @@ const (
 // op describes one IPC operation: the name its metrics and logs carry, and the
 // handler that serves it.
 //
-// A table rather than a switch because adding an operation used to mean editing
-// the dispatch switch, its metrics labels, and the opcode list separately, on
-// code that was already tested.  One entry now covers all three, and an opcode
+// A table rather than a switch because with a switch, adding an operation means
+// editing the dispatch switch, its metrics labels, and the opcode list
+// separately, on code that is already tested.  One entry covers all three, and an opcode
 // with no entry is ENOSYS by construction rather than by a default branch
 // someone has to remember to keep correct.
 //
@@ -316,9 +316,8 @@ func sendResp(w io.Writer, data []byte) error {
 // reader walks a request payload without ever slicing past its end.
 //
 // The peer is the local C daemon over a 0600 socket, so a malformed frame is a
-// protocol desync rather than an attack — but a desync of exactly this kind has
-// happened before, in the readdirplus parser, and every handler used to slice
-// with a length field it had not checked.  One out-of-range length panicked the
+// protocol desync rather than an attack — but a handler slicing with a length
+// field it has not checked turns one out-of-range length into a panic in the
 // connection goroutine, and an unrecovered panic takes down the daemon serving
 // every mount on the node.
 //
@@ -513,11 +512,11 @@ func statfsResp(blocks, bfree, files, ffree uint64) []byte {
 // timeout is the fail-safe for a watch that could not be resumed at all rather
 // than the mechanism coherence rests on.
 //
-// They used to be one second each, and the attribute one had to be: nothing
-// watched an inode's attributes, so that timeout was the whole guarantee.  One
-// second is also shorter than any walk of a real tree, which is why a warm
-// `find` or `du` over eighty thousand files cost exactly what a cold one did —
-// every name and every attribute had expired before the walk came back to it.
+// They are not one second, as they would have to be without a watch on inode
+// attributes, where the timeout is the whole guarantee: one second is shorter
+// than any walk of a real tree, so a warm `find` or `du` over eighty thousand
+// files would cost what a cold one does — every name and every attribute
+// expired before the walk came back to it.
 //
 // The defaults are in internal/config, next to the flags that carry them.
 

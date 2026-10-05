@@ -3,8 +3,8 @@ package ipc
 // The errnos the IPC layer answers with, negated as the wire carries them: a
 // response's first word is an int32, negative for a failure.
 //
-// Named because they used to be written as bare literals at every call site,
-// and `-11` against `-22` is a typo the compiler cannot see — it turns an
+// Named rather than written as bare literals at each call site, because `-11`
+// against `-22` is a typo the compiler cannot see — it turns an
 // "inode is busy, retry" into "you passed nonsense", which the kernel reports
 // to the application as EINVAL and nothing in the daemon ever contradicts.
 //

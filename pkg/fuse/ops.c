@@ -701,8 +701,8 @@ static void ec_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
  * about to read.
  *
  * cache_readdir (FOPEN_CACHE_DIR) is what stops a repeated walk of a tree from
- * costing one etcd prefix scan per directory per pass, which is why a warm
- * `find` used to cost exactly what a cold one did.  The kernel drops a cached
+ * costing one etcd prefix scan per directory per pass; without it a warm
+ * `find` costs exactly what a cold one does.  The kernel drops a cached
  * listing when the directory's i_version moves or its mtime changes, and both
  * happen here:
  *

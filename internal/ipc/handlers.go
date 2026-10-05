@@ -177,9 +177,9 @@ func (s *Service) readdirResp(ctx context.Context, payload []byte, plus bool) ([
 		return int32Resp(errIO), nil
 	}
 
-	// One round trip for every inode record rather than one per entry: readdir
-	// on a directory of a thousand files used to be a thousand sequential etcd
-	// gets, repeated on every listing.
+	// One round trip for every inode record rather than one per entry, which
+	// would make readdir on a directory of a thousand files a thousand
+	// sequential etcd gets, repeated on every listing.
 	keys := make([]string, 0, len(entries))
 	for _, e := range entries {
 		keys = append(keys, metadata.InodeKey(e.Ino))
@@ -368,10 +368,10 @@ func (s *Service) handleReadlink(ctx context.Context, payload []byte) ([]byte, e
 //
 // The result therefore under-reports: every other node's unused space inside
 // its own arenas is counted as used.  That is a deliberate choice of which way
-// to be wrong.  Deriving the whole number from this node's arena occupancy —
-// what this used to do — was wrong in both directions at once, reporting a
-// nearly empty device as full whenever this node's own arenas happened to be
-// full, and a nearly full one as empty whenever they happened to be free.
+// to be wrong.  Deriving the whole number from this node's arena occupancy
+// would be wrong in both directions at once, reporting a nearly empty device as
+// full whenever this node's own arenas happened to be full, and a nearly full
+// one as empty whenever they happened to be free.
 func (s *Service) freeBytes(ctx context.Context, deviceSize uint64) uint64 {
 	owned, err := s.store.CountOwnedArenas(ctx)
 	if err != nil {
@@ -401,9 +401,9 @@ func (s *Service) handleStatfs(ctx context.Context, _ []byte) ([]byte, error) {
 		blocks = size / 512
 		bfree = s.freeBytes(ctx, size) / 512
 	}
-	// The inode allocation counter, not a scan of the inode space: every `df`
-	// used to be a full range read over the whole namespace to use nothing but
-	// its length.  The counter counts numbers handed out rather than inodes
+	// The inode allocation counter, not a scan of the inode space, which would
+	// make every `df` a full range read over the whole namespace to use nothing
+	// but its length.  The counter counts numbers handed out rather than inodes
 	// alive, so it over-reports after deletions — an upper bound is the right
 	// error to make for a number no caller can act on.
 	files := uint64(0)
@@ -563,7 +563,7 @@ func (s *Service) cacheableOpen(flags uint32) bool {
 	}
 	if !s.notifyServer.connected() {
 		// The one condition here that is a fault rather than a setting, and the
-		// one that used to be invisible: a mount whose notify client never
+		// one that is otherwise invisible: a mount whose notify client never
 		// connected serves every read from the daemon and looks, from any
 		// measurement, exactly like a slow coordination layer.
 		if !s.noPageCacheLogged.Swap(true) {

@@ -425,8 +425,8 @@ func newFencingController(ctx context.Context, cfg *config.Config, store *metada
 // returns a channel that is closed only in the self-fence case.
 //
 // A self-fence shuts the node down through the same path a signal does, so the
-// arena release in leaveCluster still runs.  The watchdog used to call os.Exit
-// itself, which skipped it: a self-fenced node's arenas leaked, permanently in
+// arena release in leaveCluster still runs.  A watchdog calling os.Exit itself
+// would skip it: a self-fenced node's arenas would leak, permanently in
 // single-signal mode, where no fencing controller reclaims them either.
 func stopOnSignalOrFence(ctx context.Context, cancel context.CancelFunc,
 	svc *ipc.Service, watchdog *fencing.Watchdog, log *config.Logger) <-chan struct{} {

@@ -10,7 +10,7 @@ import (
 
 // The constraint the daemon's timing rests on: a request must be able to fail
 // on its own deadline before the self-fencing watchdog takes the process down
-// under it. A 3s lease TTL inverts the two, and used to be accepted.
+// under it. A 3s lease TTL inverts the two, and must be rejected.
 func TestSelfFenceWindowClearsTheRequestTimeout(t *testing.T) {
 	for _, ttl := range []time.Duration{time.Second, 3 * time.Second, 5 * time.Second} {
 		if SelfFenceWindow(ttl) > RequestTimeout {

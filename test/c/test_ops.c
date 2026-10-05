@@ -206,9 +206,9 @@ static void test_each_thread_gets_its_own_ipc_connection(void)
     unsetenv("ETCFS_IPC_SOCKET");
 }
 
-/* A daemon restart used to be terminal: the thread kept its dead fd and every
- * later request turned into EIO forever.  A failed exchange must instead leave
- * the thread with no connection, so the next request opens a fresh one. */
+/* A daemon restart must not be terminal: a thread that kept its dead fd would
+ * turn every later request into EIO forever.  A failed exchange must instead
+ * leave the thread with no connection, so the next request opens a fresh one. */
 static void test_a_failed_exchange_reconnects_on_the_next_request(void)
 {
     signal(SIGPIPE, SIG_IGN); /* writing to the closed peer below must return, not kill us */

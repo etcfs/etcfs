@@ -21,7 +21,7 @@ import (
 // nodes making unrelated entries in one directory would abort each other.  See
 // touchDir.
 //
-// So an unpacking tar used to pay two Raft commits per file — one to publish
+// Committed directly, an unpacking tar would pay two Raft commits per file — one to publish
 // the file, one to say that the directory it went into had changed — and the
 // second one for the *same* directory, over and over.  Coalescing them is what
 // this is: a directory marked changed here is written once per interval however
@@ -42,7 +42,7 @@ import (
 //
 // The times a setattr assigns are queued for the same reason and on the same
 // terms.  `tar` sets each file's timestamps after writing it, one call per
-// file, and each used to be a Raft commit of its own; a timestamp is also the
+// file, and committed directly each would be a Raft commit of its own; a timestamp is also the
 // one attribute with no enforcement meaning, so a peer seeing it an interval
 // late costs nothing a permission check depends on.  Mode and ownership are
 // deliberately *not* queued: a peer enforces access against what etcd holds,

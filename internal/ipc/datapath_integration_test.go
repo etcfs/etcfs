@@ -261,8 +261,8 @@ func readPayload(t *testing.T, resp []byte) []byte {
 
 // ---- caller credentials ----
 
-// Everything used to be created owned by a hardcoded uid 1000 with the umask
-// thrown away, so the filesystem had no notion of who owned what.
+// Creating everything as a hardcoded uid 1000 with the umask thrown away would
+// leave the filesystem with no notion of who owns what.
 func TestIntegration_CreatedFilesCarryTheCallersCredentials(t *testing.T) {
 	svc, store := newTestService(t)
 	ctx := context.Background()
@@ -400,8 +400,8 @@ func TestIntegration_ReadStopsAtTheEndOfTheFile(t *testing.T) {
 	}
 }
 
-// O_TRUNC used to be dropped on the floor: the C daemon answered open locally
-// and never told the backend, so `> file` left the old contents in place.
+// O_TRUNC must reach the backend: if the C daemon answered open locally and
+// never told it, `> file` would leave the old contents in place.
 func TestIntegration_OpenWithTruncEmptiesTheFile(t *testing.T) {
 	svc, store := newTestService(t)
 	ctx := context.Background()

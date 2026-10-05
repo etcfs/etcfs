@@ -227,7 +227,7 @@ type nlinkAdjust struct {
 //
 // A missing record yields nothing to do rather than an error: a create under a
 // parent that no longer exists is already failing on its own comparisons, and
-// the root of a filesystem seeded by an older version may predate the record.
+// the root of a filesystem seeded without an etcd record for it has none.
 func (s *Store) adjustDirNlink(ctx context.Context, ino uint64, delta int) (nlinkAdjust, error) {
 	rec, rev, err := s.GetInodeRev(ctx, ino)
 	if err != nil {

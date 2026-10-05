@@ -271,9 +271,7 @@ func TestElastic_MultipleJoinLeaveCycles(t *testing.T) {
 // regression here is caught by `go test ./...` rather than only by someone
 // remembering to run the chaos script.
 //
-// Scope note: this asserts arena disjointness only. It previously also
-// asserted non-overlapping per-node inode ranges via ReserveInodeRange, but
-// that was dead code — no production path ever called it. Inode allocation
+// Scope note: this asserts arena disjointness only. Inode allocation
 // is a single global CAS-retried counter (Service.allocInode ->
 // Store.NextCounter), which is a method on *metadata.Store and so is not
 // reachable from MockStore; concurrent inode allocation therefore has no
@@ -316,8 +314,8 @@ func TestElastic_ConcurrentJoin(t *testing.T) {
 	wg.Wait()
 
 	// No arena may be handed to two nodes — that is the hazard a broken CAS
-	// retry produces, and the one that previously let a restarting node adopt
-	// a live peer's disk range (see kleppmann-stale-write-analysis.md).
+	// retry produces, and the one a restarting node that rebuilt from every
+	// node's arenas would hit by adopting a live peer's disk range (see kleppmann-stale-write-analysis.md).
 	seenArenas := make(map[uint64]bool)
 	for _, r := range results {
 		require.NoError(t, r.joinErr, "join must succeed for %s", r.nodeID)

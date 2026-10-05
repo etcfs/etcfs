@@ -455,9 +455,9 @@ func (a *Allocator) ReapEmptyArenas(ctx context.Context, interval time.Duration)
 // free pool, reporting the arenas actually released.
 //
 // Deletes and truncates free blocks inside an arena, but the arena itself stays
-// this node's until it is handed back, and only departure and fencing ever did
-// that.  A long-lived node therefore accumulated arenas it no longer used, and
-// that space was reserved to it until the process exited — reclaimable in
+// this node's until it is handed back.  If only departure and fencing handed
+// arenas back, a long-lived node would accumulate arenas it no longer uses, and
+// that space would stay reserved to it until the process exited — reclaimable in
 // principle, unusable by any peer in practice.
 //
 // The arena is detached from the local free list *before* the etcd release, so

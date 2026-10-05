@@ -297,7 +297,7 @@ static void *notify_thread(void *arg)
             /* Said once per outage rather than once per attempt, at a level the
              * default log setting shows: an unreachable socket here is the
              * difference between a mount that caches data pages and one that
-             * does not, and the old code failed at it in silence. */
+             * does not, and failing at it in silence hides why. */
             if (!complained) {
                 etcfs_log(ETCFS_LOG_WARN,
                           "cannot reach the cache-invalidation socket %s (%s); retrying. "

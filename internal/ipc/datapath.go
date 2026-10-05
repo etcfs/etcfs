@@ -407,13 +407,13 @@ func replayTxn(ino uint64, rec *metadata.InodeRecord, ops []clientv3.Op) *txnRep
 // apply returns the inode as this transaction left it, editing the snapshot's
 // extent list in place.
 //
-// In place, because the alternative is what this code used to do: allocate and
-// copy the whole list, hash every extent's key against the transaction's, and
-// sort the result — three passes over a list that runs to tens of thousands of
-// extents on a file under random overwrite, on every 4 KiB write.  Measured at
-// 1.2 ms per write against a 10,000-extent file, which was most of what the
-// write cost; a transaction touches a handful of chunks, and that is what the
-// work here is proportional to now.
+// In place, because the alternative — allocate and copy the whole list, hash
+// every extent's key against the transaction's, and sort the result — is three
+// passes over a list that runs to tens of thousands of extents on a file under
+// random overwrite, on every 4 KiB write.  Measured at 1.2 ms per write against
+// a 10,000-extent file, which is most of what the write costs; a transaction
+// touches a handful of chunks, and that is what the work here is proportional
+// to.
 //
 // Safe only because the caller holds the inode's exclusive local lock and calls
 // this after the write is buffered or committed: the snapshot has one owner at
@@ -463,8 +463,8 @@ func indexOfChunk(extents []metadata.Extent, chunk uint64) int {
 // With O_DIRECT on a device that acknowledges a write only once it is durable —
 // an EBS io2 Multi-Attach volume — the pwrite is the whole publication: no cache
 // on this node holds the bytes, so no barrier can make another attacher see them
-// any sooner.  The three extra round trips that used to follow every write are
-// therefore behind writeBarriers, for a device with a volatile write cache and
+// any sooner.  The three extra round trips a barrier costs are therefore behind
+// writeBarriers, for a device with a volatile write cache and
 // for buffered mode, where the page cache genuinely does hold the bytes back.
 //
 // The barrier readback is not a verification — the bytes are discarded.  It is
@@ -527,12 +527,11 @@ func (s *Service) recordReserved(runs []arena.Run) []arena.Run {
 // writeGeneration returns the fencing generation to stamp on an extent: this
 // node's own, which is 0 until it is first fenced.
 //
-// It used to floor the value at 1, so that a missing stamp stayed
-// distinguishable from a real generation.  That is no longer a distinction
-// worth making — every field of an extent value is required, so a missing stamp
-// is a decode failure rather than a zero — and the floor put every extent
-// written by a never-fenced node one generation ahead of the node itself, which
-// the scrubber correctly reports as an extent from the future.
+// The value is not floored at 1 to keep a missing stamp distinguishable from a
+// real generation: every field of an extent value is required, so a missing
+// stamp is a decode failure rather than a zero.  A floor would also put every
+// extent written by a never-fenced node one generation ahead of the node
+// itself, which the scrubber reports as an extent from the future.
 // It is the generation the commit will be guarded against, not a fresh read of
 // the key: the two are the same number, and a write whose stamp disagreed with
 // its own guard could not commit anyway.  Reading it here cost an etcd round

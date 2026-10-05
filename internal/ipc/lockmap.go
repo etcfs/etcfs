@@ -184,8 +184,7 @@ func (m *lockMap) evictLocked() {
 // entries and returns them, oldest first.
 //
 // The candidates are ordered before any of them is locked, so the sweep costs
-// one pass and one sort of the set rather than a pass per victim — which is
-// what a batch of evictions used to cost, one linear scan each.
+// one pass and one sort of the set rather than a linear scan per victim.
 //
 // TryLock rather than Lock: an entry with an operation in flight is skipped,
 // never waited for.  Evicting it would let the next caller build a second entry

@@ -9,8 +9,8 @@ import (
 	"github.com/etcfs/etcfs/pkg/metadata"
 )
 
-// Every handler used to slice with a length field it had not checked, so a
-// frame claiming more than it carries panicked the connection goroutine — and
+// A handler slicing with a length field it has not checked lets a frame
+// claiming more than it carries panic the connection goroutine — and
 // an unrecovered panic there ends the daemon serving every mount on the node.
 func TestReaderRefusesLengthsPastTheEndOfThePayload(t *testing.T) {
 	payload := make([]byte, 12)

@@ -201,8 +201,8 @@ func (s *Store) LockHeldBy(ctx context.Context, ino uint64, mode LockMode, holde
 // the rest.
 //
 // All of a node's locks share one session lease, so an acquisition is a single
-// transaction: the per-lock GrantLease and RevokeLease that used to bracket
-// every write were two Raft commits on the critical path, and the lease TTL is
+// transaction: a per-lock GrantLease and RevokeLease around every write would
+// be two Raft commits on the critical path, and the lease TTL is
 // what releases a dead holder's lock whether that lease was granted once or
 // once per write.  This is the shape of an NFSv4 write delegation, with the
 // delegation scoped to the lock rather than to the open — a lock still spans a
@@ -300,9 +300,9 @@ type LockRelease struct {
 // for each whether its key was still there to drop.
 //
 // One commit for the batch rather than one per key.  A cache eviction sweep is
-// what makes that worth having: the cache gives up many inodes at once and each
-// release used to be its own Raft commit, so a workload touching far more
-// inodes than the cache holds paid a commit per evicted inode.
+// what makes that worth having: the cache gives up many inodes at once, and
+// with a Raft commit per release a workload touching far more inodes than the
+// cache holds would pay a commit per evicted inode.
 //
 // The per-key answers are what ReleaseLock's own return value is, and they
 // matter for the same reason: a key the lease had already dropped means this
@@ -340,8 +340,8 @@ func (s *Store) ReleaseLocks(ctx context.Context, batch []LockRelease) ([]bool, 
 // there to drop.
 //
 // Deleting that holder's key and only that key leaves a shared lock standing
-// with its remaining holders — and, now that the lease is shared by every lock
-// the node holds, a delete is the only release that does not drop all of them.
+// with its remaining holders — and, since the lease is shared by every lock the
+// node holds, a delete is the only release that does not drop all of them.
 //
 // A false return means the lease had already expired the key: the caller
 // stopped holding the lock at some instant it never observed, rather than at

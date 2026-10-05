@@ -17,18 +17,19 @@ import (
 
 // Inode lock caching.
 //
-// An inode lock used to be acquired and released in etcd around every single
-// operation, which put two Raft commits on the critical path of a write and
-// one on the critical path of a read.  At etcd's measured ~2.2ms per commit
-// that alone set the filesystem's IOPS ceiling, and no amount of provisioned
-// device IOPS moved it — a serial chain of commits is latency-bound, and
+// Acquiring and releasing an inode lock in etcd around every single operation
+// would put two Raft commits on the critical path of a write and one on the
+// critical path of a read.  At etcd's measured ~2.2ms per commit that alone
+// would set the filesystem's IOPS ceiling, and no amount of provisioned device
+// IOPS would move it — a serial chain of commits is latency-bound, and
 // provisioning buys parallelism.
 //
-// So a lock key now outlives the operation that took it.  The node keeps it in
+// So a lock key outlives the operation that took it.  The node keeps it in
 // etcd and reuses it for every later operation on the same inode, which costs
 // nothing: a repeat acquisition is a map lookup.  What the operation still
 // takes, every time, is a node-local lock — the exclusion between this node's
-// own threads that the etcd key used to provide as a side effect.
+// own threads, which a per-operation etcd key would provide as a side effect and
+// a shared cached key does not.
 //
 // A cached key is under no lease that will expire while the node lives, so a
 // peer blocked on it cannot simply wait.  It writes a want key instead
@@ -470,8 +471,8 @@ func (s *Service) recordRelease(e *lockEntry, owed metadata.LockRelease, wasHeld
 //
 // One transaction for the whole batch is the point of it.  A release is a Raft
 // commit, and a workload touching far more inodes than the cache holds — an
-// unpacking archive is the example — evicts one inode per new one and used to
-// pay that commit per file.  Batching the deletes does not widen what any one
+// unpacking archive is the example — evicts one inode per new one and would pay
+// that commit per file.  Batching the deletes does not widen what any one
 // key stands for: each key is still deleted, still by exact holder token, and
 // the recorded hold merely ends later than it would have, which is the safe
 // direction for a mutual-exclusion checker.
@@ -828,8 +829,8 @@ func (s *Service) ReleaseCachedLocks() {
 // Taking a new file's lock in the transaction that creates it.
 //
 // A file that is written after it is created — which is every file an
-// unpacking archive makes — used to pay a Raft commit for its lock the moment
-// the first write arrived.  It does not have to: the inode number is known when
+// unpacking archive makes — would otherwise pay a Raft commit for its lock the
+// moment the first write arrived.  It does not have to: the inode number is known when
 // the name is published, and no peer can be contending for a number nobody has
 // been told about, so the lock key rides the create transaction and the cache
 // is seeded from it.  The first write then finds the lock already held and the

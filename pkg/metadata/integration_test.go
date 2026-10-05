@@ -1269,8 +1269,8 @@ func TestIntegration_RenameOverTargetPinsTheVictimInode(t *testing.T) {
 // ---- atomic creation ----
 
 // Every creating operation publishes the inode and the name that reaches it in
-// one transaction. Symlink, mknod and link used to be two or three round trips,
-// so a failure between them left an inode nothing could name — invisible to the
+// one transaction. Split into two or three round trips, a failure between them
+// would leave an inode nothing can name — invisible to the
 // orphan check, which looks for extents without inodes, not the reverse.
 func TestIntegration_CreationsPublishInodeAndNameTogether(t *testing.T) {
 	ctx := context.Background()
@@ -1447,8 +1447,7 @@ func TestIntegration_NamespaceOpsTouchTheParentDirectory(t *testing.T) {
 }
 
 // A directory is referred to by the ".." of every subdirectory it holds, so its
-// link count moves as subdirectories arrive and leave. It used to be fixed at
-// 2 for the directory's whole life.
+// link count moves as subdirectories arrive and leave rather than staying at 2.
 func TestIntegration_DirectoryNlinkCountsSubdirectories(t *testing.T) {
 	store := testStore(t, "test-node")
 	ctx := context.Background()
