@@ -75,12 +75,27 @@ func NewStore(client *clientv3.Client, nodeID string) *Store {
 
 // SetGuard installs the fencing-generation guard applied to every Txn.
 //
-// The guard is deliberately opt-out rather than opt-in: the failure mode being
-// designed against is a new mutation path forgetting to guard itself, which is
-// exactly how namespace operations went unguarded while the helper existed.
-// Paths that must bypass it call txnRaw explicitly — there are only three
-// (see EnsureGenerationKey, BumpGeneration, and bootstrap membership
-// registration), and each is unguarded for a reason documented at the call.
+// The guard is opt-out rather than opt-in, because a mutation path that forgets
+// to ask for one is then unguarded, and an unguarded namespace mutation lets a
+// fenced node create, delete and rename entries in the directory tree every
+// other node reads.  Guarding by default makes that impossible to introduce by
+// omission.
+//
+// The paths that bypass it call txnRaw or putRaw, and each would otherwise
+// block an operation that has to work on behalf of a node already fenced:
+//
+//   - the generation key itself — PutGeneration, BumpGeneration and
+//     EnsureGenerationKey; guarding the counter by the value it changes would
+//     make fencing impossible;
+//   - the fencing control plane — RecordFenceIntent, ClaimFence and
+//     MarkFenceComplete, which a survivor writes *about* a fenced node;
+//   - what a fenced node must still be able to give back — MarkDeparted,
+//     ReleaseArenaID and ClaimFreeArena;
+//   - AnnounceLockWant, which mutates no filesystem state; the acquisition it
+//     leads to is guarded in the ordinary way.
+//
+// Membership registration bypasses the guard as well, by not going through the
+// store at all: Membership writes its own key with its own client.
 func (s *Store) SetGuard(g GuardFunc) {
 	s.guard = g
 }
