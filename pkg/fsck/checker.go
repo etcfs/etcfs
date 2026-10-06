@@ -44,10 +44,10 @@ func (c *Checker) Run(ctx context.Context) []Finding {
 	c.Findings = nil
 
 	// The consistency checks themselves live in pkg/scrub and are shared: this
-	// is the offline front end, the scrubber is the online one.  They were
-	// implemented twice, with different thresholds and severities, which is
-	// exactly how an offline check and an online check come to disagree about
-	// whether a filesystem is healthy.
+	// is the offline front end, the scrubber is the online one.  Two
+	// implementations would drift apart in thresholds and severities, which is
+	// how an offline check and an online check come to disagree about whether a
+	// filesystem is healthy.
 	snap, err := scrub.Scan(ctx, c.Store)
 	if err != nil {
 		c.Findings = append(c.Findings, Finding{
