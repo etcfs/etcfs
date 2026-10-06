@@ -11,8 +11,8 @@ import (
 // N names".  etcd cannot skip: a range starts at a key, so serving position N
 // by reading means reading the N keys before it and throwing them away.  Doing
 // that once per page makes one scan of a directory read the whole directory
-// once per page, which is quadratic in its size and was measured at a second
-// per thousand entries.
+// once per page, which is quadratic in its size: measured at a second per
+// thousand entries.
 //
 // The way out is that a scan is sequential: the offset a READDIR asks for is
 // almost always the one the previous reply ended on.  So the daemon remembers
@@ -20,14 +20,15 @@ import (
 // exactly there is answered by reading forward from that name instead of from
 // the beginning.  Anything else — a seekdir, a second process scanning the same
 // directory, a cursor that has expired — misses and falls back to reading the
-// directory and slicing by position, which is what every request did before.
+// directory and slicing by position.
 //
 // Nothing here is a cache of directory *contents*: a cursor is a name used as
-// the start of a fresh linearizable range read, so a stale one cannot produce a
-// stale listing.  The worst a wrong cursor can do is start the page in the
-// wrong place, and it can only be wrong in the way a position already is —
-// names inserted or removed behind the scan shift it either way, which POSIX
-// leaves unspecified for exactly this reason.
+// the start of a fresh linearizable range read, so a page served from it cannot
+// return a deleted name or hide an existing one.  A miss is weaker.  Its offset
+// is only a position, so a name removed before it since the previous page makes
+// one unrelated name be skipped, and one added makes a name repeat.  libfuse
+// asks for offsets that never do that; POSIX only leaves unspecified whether the
+// added or removed name itself appears.
 type dirCursor struct {
 	offset uint64 // the position the next request must ask for
 	name   string // the last name handed out, to resume after
@@ -41,8 +42,8 @@ const (
 	dirCursorMax = 1024
 
 	// dirCursorTTL drops a cursor whose scan was abandoned.  A scan that pauses
-	// longer than this pays one full read to resume, which is what it would
-	// have paid for every page before any of this existed.
+	// longer than this pays one full read to resume, the cost every page would
+	// carry without a cursor.
 	dirCursorTTL = 60 * time.Second
 )
 

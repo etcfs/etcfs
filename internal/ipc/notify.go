@@ -270,11 +270,13 @@ func (s *Service) direntWatchGap() {
 
 // inodeChanged drops the kernel's cached attributes for an inode a peer wrote.
 //
-// An inode whose lock key this node holds cannot have been written by a peer,
-// so the change is this node's own and the kernel's copy of it came from the
-// reply to the very operation that made it.  Skipping those is what keeps a
-// stream of creates from invalidating each new file's attributes immediately
-// after handing them to the kernel.
+// Inodes whose lock key this node holds are skipped, which keeps a stream of
+// creates from invalidating each new file's attributes immediately after
+// handing them to the kernel.  The skip is exact only for the fields the lock
+// covers, the size and the extent list.  Mode, ownership and the link count
+// are changed by setattr, link, unlink and rename without the lock, so a
+// peer's chmod on an inode held here reaches this kernel only when
+// attr_timeout expires or the key is given up.
 func (s *Service) inodeChanged(ev *clientv3.Event) {
 	ino, ok := metadata.ParseInodeKey(string(ev.Kv.Key))
 	if !ok || s.holdsLockKey(ino) {

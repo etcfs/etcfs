@@ -38,8 +38,8 @@ const (
 	ipcOpStatfs     = 17
 	ipcOpAlloc      = 18
 	ipcOpCommit     = 19
-	// 27 and 28 were GETLK/SETLK, removed so the kernel handles fcntl() locks
-	// locally; not reused, so an old C daemon's lock request fails loudly.
+	// 27 and 28 are reserved and not reused: the kernel handles fcntl() locks
+	// locally, and a C daemon that still sends a lock request fails loudly.
 	ipcOpRead        = 22
 	ipcOpWrite       = 23
 	ipcOpFsync       = 24

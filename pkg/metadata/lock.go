@@ -205,8 +205,9 @@ func (s *Store) LockHeldBy(ctx context.Context, ino uint64, mode LockMode, holde
 // be two Raft commits on the critical path, and the lease TTL is
 // what releases a dead holder's lock whether that lease was granted once or
 // once per write.  This is the shape of an NFSv4 write delegation, with the
-// delegation scoped to the lock rather than to the open — a lock still spans a
-// single operation, so no waiter can be made to wait on another node's close.
+// delegation scoped to the lock rather than to the open — a key is tied to
+// operations on the inode, and a cached one is yielded when a peer asks for it,
+// so no waiter can be made to wait on another node's close.
 func (s *Store) AcquireLock(ctx context.Context, ino uint64, mode LockMode, ttl time.Duration) (string, error) {
 	if mode != LockShared && mode != LockExclusive {
 		return "", fmt.Errorf("acquire lock ino %d: unknown mode %q (%w)", ino, mode, ErrInvalid)

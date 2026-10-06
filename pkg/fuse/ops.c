@@ -1388,8 +1388,8 @@ struct fuse_lowlevel_ops *etcfs_fuse_ops(void)
     /* getlk/setlk are deliberately left unset. libfuse: "if the locking
      * methods are not implemented, the kernel will still allow file locking
      * to work locally." Implementing them takes that job away from the
-     * kernel, and the daemon granted every request, so fcntl() locks
-     * excluded nothing -- not even two processes on the same node. Unset,
-     * fcntl() gets the node-local enforcement flock() already had. */
+     * kernel, and handlers that grant every request make fcntl() locks
+     * exclude nothing -- not even two processes on the same node. Unset,
+     * fcntl() gets the same node-local enforcement as flock(). */
     return &ops;
 }

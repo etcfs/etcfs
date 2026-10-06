@@ -1097,25 +1097,20 @@ func (s *Service) handleMknod(ctx context.Context, payload []byte) ([]byte, erro
 	return s.entryResp(ino, rec), nil
 }
 
-// ---- lock handlers ----
+// ---- POSIX locks ----
 //
 // EtcFS does not track byte-range locks in etcd.  The lock:<ino> keys used by
-// the read and write paths are whole-inode leases held for the duration of a
-// single operation, which is a different thing from a process-owned POSIX
-// record lock and cannot answer GETLK/SETLK on its own.
+// the read and write paths are whole-inode locks held by a node, cached between
+// operations, which is a different thing from a process-owned POSIX record lock
+// and cannot answer GETLK/SETLK on its own.
 //
-// So both handlers report "no conflict", which leaves the kernel's own local
-// lock bookkeeping in charge: correct within one node, not enforced across
-// nodes.  Reporting a conflict instead would be worse than useless — SETLK cannot grant a lock it
-// does not track, so every caller would spin on EAGAIN forever.
-
-// GETLK and SETLK are deliberately not handled here, and the C daemon does not
+// GETLK and SETLK are therefore not handled here, and the C daemon does not
 // implement the matching FUSE operations.  libfuse's contract is that "if the
 // locking methods are not implemented, the kernel will still allow file locking
 // to work locally" — implementing them takes that job away from the kernel, so
-// answering "always free / always granted" left fcntl() locks excluding nothing
-// at all, not even between two processes on one node.  Leaving them unwired
-// gives fcntl() the same node-local-correct behavior flock() already has.
+// handlers answering "always free / always granted" would leave fcntl() locks
+// excluding nothing, not even between two processes on one node.  Unwired,
+// fcntl() gets the same node-local enforcement as flock().
 
 // allocInode reserves an inode number, from the block this node is holding
 // when it still has one and from etcd when it does not.  See inodealloc.go.
