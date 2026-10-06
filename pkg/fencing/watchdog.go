@@ -6,12 +6,13 @@
 // longer than 2× the TTL, the watchdog declares the node fenced and exits the
 // process with code 77.
 //
-// Exiting is the whole sequence — it does not drain writes, close the block
-// device, or remount read-only first.  That is deliberate: a node that cannot
-// reach etcd cannot trust its own view of the cluster, so attempting an
-// orderly shutdown risks acting on stale state.  Process exit lets the kernel
-// release the block device and the FUSE mount, and open handles get EIO,
-// which is the correct outcome for a node that no longer trusts itself.
+// The watchdog itself only signals: it sets the fenced flag and closes the
+// Fenced() channel.  main waits on that channel and runs the same shutdown a
+// SIGTERM does — cached locks back first, then the flush, the lock session and
+// the arena release — before exiting 77.  Every step of that is an etcd call
+// made by a node that has just concluded it cannot reach etcd, so each is best
+// effort; what is not best effort is process exit, which lets the kernel
+// release the block device and the FUSE mount, and open handles get EIO.
 //
 // Because the check runs on a ticker of one TTL, the fence lands 2-3× TTL
 // after the last successful keepalive depending on tick phase, not a flat 2×.
@@ -54,9 +55,9 @@ func NewWatchdog(membership *metadata.Membership, leaseTTL time.Duration) *Watch
 	}
 }
 
-// Run starts the watchdog.  It polls the membership at 2× the heartbeat
-// interval and triggers self-fence if the lease has been dead longer than
-// 2× the TTL.
+// Run starts the watchdog.  It polls the membership once per lease TTL and
+// triggers self-fence if the lease has been dead longer than
+// config.SelfFenceWindow, which is 2× the TTL.
 //
 // Blocks until ctx is cancelled or self-fence triggers.
 func (w *Watchdog) Run(ctx context.Context) {
