@@ -6,6 +6,8 @@ import (
 	"math/rand/v2"
 	"time"
 
+	clientv3 "go.etcd.io/etcd/client/v3"
+
 	"github.com/etcfs/etcfs/pkg/metadata"
 )
 
@@ -37,14 +39,22 @@ type Simulator struct {
 
 	faultSchedule map[int64]FaultType
 	crashPoints   map[int64]bool
+
+	// session is the lease this node's lock keys are written under, as the
+	// daemon's lock session is.  A lease-expiry fault deletes those keys.
+	session clientv3.LeaseID
 }
+
+// sessionTTL is long enough that the session never expires on its own within
+// a test's tick budget; expiry is injected with FaultLeaseExpiry.
+const sessionTTL = time.Hour
 
 func NewSimulator(seed int64) *Simulator {
 	return NewSimulatorWithStore(seed, NewMockStore())
 }
 
 func NewSimulatorWithStore(seed int64, store *MockStore) *Simulator {
-	return &Simulator{
+	sim := &Simulator{
 		store:         store,
 		rng:           rand.New(rand.NewPCG(uint64(seed), 0)),
 		seed:          seed,
@@ -54,6 +64,13 @@ func NewSimulatorWithStore(seed int64, store *MockStore) *Simulator {
 		faultSchedule: make(map[int64]FaultType),
 		crashPoints:   make(map[int64]bool),
 	}
+	sim.newSession()
+	return sim
+}
+
+// newSession grants the lease the next lock keys are written under.
+func (s *Simulator) newSession() {
+	s.session, _ = s.store.GrantLease(context.Background(), sessionTTL)
 }
 
 func (s *Simulator) AddFault(tick int64, ft FaultType) {
@@ -223,21 +240,22 @@ func (s *Simulator) truncate(ctx context.Context, ino uint64, newSize uint64) {
 
 func (s *Simulator) acquireLock(ctx context.Context, ino uint64) {
 	s.locks[ino] = &metadata.LockRecord{Mode: "exclusive"}
-	_, _ = s.store.Put(ctx, metadata.LockKey(ino, metadata.LockExclusive, "harness"), []byte("sim-node"))
+	_, _ = s.store.PutLeased(ctx, metadata.LockKey(ino, metadata.LockExclusive, "harness"),
+		[]byte("sim-node"), s.session)
 }
 
-// injectFault applies a scheduled fault. Only FaultLeaseExpiry touches the
-// store, and it removes the lease entries without deleting the keys bound to
-// them (MockStore.Tick does that on a real expiry). The simulator's operations
-// write no leased keys, so in practice no fault here changes state; crashes,
-// scheduled with AddCrash, are the one event that does. The other fault types
-// are recorded in the log only.
+// injectFault applies a scheduled fault.  FaultLeaseExpiry expires every
+// lease in the store, deleting the lock keys written under this node's
+// session; the node loses every lock it held and continues under a new
+// session, as the daemon does when its lock session is lost.  The partition,
+// leader-election and quorum-loss faults are recorded in the log only: the
+// mock store has no network or Raft to disturb.
 func (s *Simulator) injectFault(ft FaultType) {
 	s.store.log = append(s.store.log, fmt.Sprintf("fault: %d", ft))
 	if ft == FaultLeaseExpiry {
-		for lid := range s.store.leases {
-			delete(s.store.leases, lid)
-		}
+		s.store.ExpireAllLeases()
+		s.locks = make(map[uint64]*metadata.LockRecord)
+		s.newSession()
 	}
 }
 

@@ -57,14 +57,35 @@ func (s *MockStore) Tick() {
 	for lid, l := range s.leases {
 		l.ttl--
 		if l.ttl <= 0 {
-			for _, key := range l.keys {
-				delete(s.kv, key)
-				s.rev++
-				s.deliverWatchEvent(key, mvccpb.DELETE)
-			}
-			delete(s.leases, lid)
+			s.expireLocked(lid)
 		}
 	}
+}
+
+// ExpireAllLeases expires every lease now, as if each TTL had run out: the
+// keys bound to a lease are deleted with it, and watchers see the deletes.
+func (s *MockStore) ExpireAllLeases() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for lid := range s.leases {
+		s.expireLocked(lid)
+	}
+}
+
+func (s *MockStore) expireLocked(lid clientv3.LeaseID) {
+	l, ok := s.leases[lid]
+	if !ok {
+		return
+	}
+	for _, key := range l.keys {
+		if _, live := s.kv[key]; !live {
+			continue
+		}
+		delete(s.kv, key)
+		s.rev++
+		s.deliverWatchEvent(key, mvccpb.DELETE)
+	}
+	delete(s.leases, lid)
 }
 
 func (s *MockStore) Log() []string { return s.log }
@@ -81,6 +102,22 @@ func (s *MockStore) Put(ctx context.Context, key string, value []byte, opts ...c
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.kv[key] = value
+	s.rev++
+	s.deliverWatchEvent(key, mvccpb.PUT)
+	return s.rev, nil
+}
+
+// PutLeased writes key bound to lease, so the key is deleted when the lease
+// expires or is revoked, as etcd's Put with clientv3.WithLease does.
+func (s *MockStore) PutLeased(ctx context.Context, key string, value []byte, lease clientv3.LeaseID) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	l, ok := s.leases[lease]
+	if !ok {
+		return 0, fmt.Errorf("lease %d not found", lease)
+	}
+	s.kv[key] = value
+	l.keys = append(l.keys, key)
 	s.rev++
 	s.deliverWatchEvent(key, mvccpb.PUT)
 	return s.rev, nil

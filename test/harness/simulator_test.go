@@ -168,6 +168,29 @@ func TestLeaseExpiryStaleWrites(t *testing.T) {
 	assert.Zero(t, v, "lease expiry injection should not violate invariants")
 }
 
+// The fault must actually take the node's locks away: the key written under
+// the session is gone from the store, and the node no longer believes it holds
+// it.  A lock acquired afterwards is written under the new session and stays.
+func TestLeaseExpiryDeletesLockKeys(t *testing.T) {
+	s := NewSimulator(2003)
+	ctx := t.Context()
+	key := metadata.LockKey(42, metadata.LockExclusive, "harness")
+
+	s.acquireLock(ctx, 42)
+	got, _ := s.store.Get(ctx, key)
+	assert.NotNil(t, got, "lock key should be written")
+
+	s.injectFault(FaultLeaseExpiry)
+	got, _ = s.store.Get(ctx, key)
+	assert.Nil(t, got, "lease expiry should delete the lock key")
+	assert.Empty(t, s.locks, "lease expiry should drop the node's held locks")
+
+	s.acquireLock(ctx, 43)
+	s.store.Tick()
+	got, _ = s.store.Get(ctx, metadata.LockKey(43, metadata.LockExclusive, "harness"))
+	assert.NotNil(t, got, "a lock taken under the new session should survive a tick")
+}
+
 // ---- C4.8: Transaction conflict storm ----
 
 func TestConflictStorm(t *testing.T) {
