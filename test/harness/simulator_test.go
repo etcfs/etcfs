@@ -150,6 +150,8 @@ func TestCrashDuringBulkDelete(t *testing.T) {
 
 // ---- C4.5: etcd partition during Txn ----
 
+// FaultEtcdPartition is log-only in the simulator, so this checks only that
+// scheduling it does not disturb the run; partitions are exercised by chaos S3.
 func TestEtcdPartitionDuringTxn(t *testing.T) {
 	s := NewSimulator(1001)
 	s.AddFault(5, FaultEtcdPartition)
@@ -231,11 +233,8 @@ func TestIntentionalBug_DuplicateInode(t *testing.T) {
 	}
 	s.store.log = nil
 
-	// The duplicate should be flagged — nlink should be 1 but we have 2 dirents
-	// Actually this won't detect it because we overwrote the inode
-	// Let's test differently: dirent points to same inode but with wrong nlink
+	// A second dirent for the same inode leaves nlink=1 against two names.
 	s.dirents[metadata.DirentKey(1, "file-b.txt")] = 9100
-	// Now ino 9100 has nlink=1 but 2 dirents point to it
 
 	v := s.checkInvariants()
 	assert.Greater(t, v, 0, "harness should detect duplicate inode via nlink mismatch")

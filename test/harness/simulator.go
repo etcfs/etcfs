@@ -226,6 +226,12 @@ func (s *Simulator) acquireLock(ctx context.Context, ino uint64) {
 	_, _ = s.store.Put(ctx, metadata.LockKey(ino, metadata.LockExclusive, "harness"), []byte("sim-node"))
 }
 
+// injectFault applies a scheduled fault. Only FaultLeaseExpiry touches the
+// store, and it removes the lease entries without deleting the keys bound to
+// them (MockStore.Tick does that on a real expiry). The simulator's operations
+// write no leased keys, so in practice no fault here changes state; crashes,
+// scheduled with AddCrash, are the one event that does. The other fault types
+// are recorded in the log only.
 func (s *Simulator) injectFault(ft FaultType) {
 	s.store.log = append(s.store.log, fmt.Sprintf("fault: %d", ft))
 	if ft == FaultLeaseExpiry {

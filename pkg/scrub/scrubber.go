@@ -5,9 +5,11 @@
 //  1. Extent collisions — two inodes claiming the same disk offset
 //  2. Range violations — extent outside its owning arena's range
 //  3. Orphan extents — allocated blocks with no inode reference
-//  4. Generation mismatches — extent stamped with wrong fencing generation
-//  5. Nlink inconsistencies — inode nlink doesn't match dirent count
-//  6. Unreferenced inodes — inode records no directory entry names
+//  4. Dead extents — extents past the file size or fully covered by a later write
+//  5. Generation mismatches — extent stamped with a generation higher than
+//     its writer's counter
+//  6. Nlink inconsistencies — inode nlink doesn't match dirent count
+//  7. Unreferenced inodes — inode records no directory entry names
 //
 // Anomalies are logged and emitted as metrics.  The scrubber can reclaim
 // safe anomalies (orphans) automatically.  Unsafe anomalies (collisions,
