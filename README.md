@@ -49,7 +49,7 @@ EtcFS loses — in the
   under the inode's lock and are invalidated before it is yielded.
 - **Grow the volume under a running cluster.** New space allocatable in
   **3.90 s**, no restart and no remount anywhere.
-- **Correctness checked by tools EtcFS did not write.** **8,787/8,787**
+- **Correctness checked by tools EtcFS did not write.** **8,789/8,789**
   pjdfstest POSIX assertions pass; Porcupine finds every recorded history
   linearizable against four models (**20/20** chaos assertions, 7/7 model runs);
   the fencing protocol is TLA+ model-checked to **11.7 M states**, with four
