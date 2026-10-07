@@ -411,9 +411,10 @@ func ExtentModel(crashed ...string) porcupine.Model {
 }
 
 // CheckExtents checks a decoded data-path history against the byte-register
-// model. WRITE and READ are both linearizable as observed over the socket —
-// see docs/verification/porcupine.md for why the write path's internal
-// serializable pre-read does not need its own classifier here.
+// model. WRITE and READ are both linearizable as observed over the socket:
+// the write path's internal serializable pre-read is not recorded, and a
+// stale answer to it fails the guarded commit and is retried, so it needs no
+// classifier of its own here.
 //
 // crashed names the nodes that were killed rather than shut down, whose
 // unflushed writes are allowed to have been lost with them.

@@ -1,6 +1,6 @@
 // Command verify-history checks one or more recorded operation histories
 // (etcfuse-meta --history-log) against the consistency models in
-// test/verify. See docs/verification/porcupine.md.
+// test/verify.
 package main
 
 import (

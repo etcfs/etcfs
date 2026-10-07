@@ -2,7 +2,7 @@
 # chaos-arena-collision.sh — arena ownership / cross-node block collision test.
 #
 # Reproduces the concrete channel through which Kleppmann's stale-write hazard
-# reaches EtcFS.  See docs/architecture/kleppmann-stale-write-analysis.md.
+# (a client that keeps writing after its lease has expired) reaches EtcFS.
 #
 # The hazard is NOT the textbook "two nodes overwrite the same block in place":
 # EtcFS never overwrites a live extent, and a fenced node's late write lands as
@@ -184,12 +184,11 @@ scenario_s9() {
 scenario_s10() {
     log "======== S10: fenced writer's data stays unreferenced ========"
 
-    # NOTE on what this does NOT check: every extent is stamped with at least
-    # generation 1 the moment it is written (writeGeneration floors a
-    # never-fenced node's gen=0 to 1, see docs/architecture/
-    # fencing-generation-protocol.md), so "does any extent carry a generation
-    # above N" is true of every extent in a healthy cluster and cannot
-    # distinguish a stale write from a normal one. The real invariant is
+    # NOTE on what this does NOT check: every extent is stamped with its
+    # writer's own generation (0 until that node is first fenced), and a stamp
+    # at or below the writer's counter is the normal state of every extent
+    # written before a fence, so a stamp comparison cannot distinguish a stale
+    # write from a normal one. The real invariant is
     # narrower: commitGuarded is one atomic transaction, so a single write
     # either publishes in full before the fence wins the race (legal) or is
     # rejected in full (also legal) — it can never leave a torn or partial

@@ -519,10 +519,10 @@ case "$SCENARIO" in
     *) log "unknown scenario: $SCENARIO" ;;
 esac
 
-# On by default: history verification (see docs/verification/porcupine.md) is
-# no longer new or risky enough to gate behind an opt-in, and a violation here
-# means an invariant the rest of this suite depends on broke — that is worth
-# failing the run over, not just logging past. Set VERIFY_HISTORY=0 to skip it.
+# On by default, docker only (histories are recorded to a docker volume): a
+# violation here means an invariant the rest of this suite depends on broke,
+# which is worth failing the run over rather than logging past. Set
+# VERIFY_HISTORY=0 to skip it.
 if [[ "$MODE" == "docker" && "${VERIFY_HISTORY:-1}" == "1" ]]; then
     log "Checking recorded operation histories..."
     # Every node is SIGKILLed by this suite (n1 in S1/S2/S7/S9, all three in

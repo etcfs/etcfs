@@ -228,8 +228,9 @@ func (c *Controller) fenceNode(ctx context.Context, nodeID, instanceID string, f
 	// failed EIO for the life of the process, and -- once it had legitimately
 	// re-claimed an arena -- that arena released out from under it to a peer,
 	// putting two live nodes in one range.  Found by TLC, not by fault
-	// injection, which had never produced the interleaving; the trace is in
-	// docs/verification/tla-plus.md.
+	// injection, which had never produced the interleaving; the
+	// FencingNoIncarnationCheck configuration in etcfs-tla-specs reproduces
+	// it.
 	//
 	// The check is on incarnation rather than liveness because liveness is
 	// not enough, and the model rejects it: a node can depart, restart,
@@ -306,9 +307,9 @@ func (c *Controller) fenceNode(ctx context.Context, nodeID, instanceID string, f
 	// The order is the entire point.  Bumping first would advertise "this
 	// node is fenced, its arenas and locks may be reclaimed" while the node
 	// may still be issuing writes to the device — the reclaiming node would
-	// then allocate into a range the fenced node is actively writing, which
-	// is the arena-collision hazard in kleppmann-stale-write-analysis.md, and
-	// no guard would catch it because both nodes pass their own checks.
+	// then allocate into a range the fenced node is actively writing: two
+	// nodes writing one arena, which no guard would catch because both nodes
+	// pass their own checks.
 	//
 	// A failed fence therefore aborts rather than falling back to bumping
 	// anyway: an uncut node the cluster believes is fenced is more dangerous
@@ -349,9 +350,8 @@ func (c *Controller) fenceNode(ctx context.Context, nodeID, instanceID string, f
 	// Reclaim the fenced node's arena, but only where the fence was
 	// device-enforced.
 	//
-	// This is invariant 4 from kleppmann-stale-write-analysis.md: an arena may
-	// return to the pool only once the previous owner is provably done with
-	// it.  A confirmed Fencer.Fence is exactly that proof — the device itself
+	// An arena may return to the pool only once the previous owner is
+	// provably done with it.  A confirmed Fencer.Fence is exactly that proof — the device itself
 	// is already rejecting the node's writes, so the range can be reissued
 	// immediately, with no grace period and no clock-bound argument.  In
 	// single-signal mode (no Fencer) there is no such proof: the node's

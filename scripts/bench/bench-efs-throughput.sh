@@ -4,10 +4,9 @@
 # comes to io2's --iops), plus etcfs at its own baseline for reference.
 #
 # Bursting scales with stored size and a burst-credit balance a fresh
-# filesystem starts with — see docs/architecture/reliability/
-# performance-benchmarks.md for why that made the first EFS number in this
-# repo real but not comparable to a provisioned ceiling. Provisioned mode is
-# the fix: a stated MiB/s budget, same idea as choosing --iops for io2.
+# filesystem starts with, so a bursting number is not comparable to a
+# provisioned ceiling. Provisioned mode gives a stated MiB/s budget, the same
+# idea as choosing --iops for io2.
 #
 # Requires: create-infra.sh + setup-compute.sh already run.
 #

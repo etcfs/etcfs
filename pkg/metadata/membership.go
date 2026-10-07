@@ -166,7 +166,7 @@ func (m *Membership) grantAndRegister(ctx context.Context) (clientv3.LeaseID, er
 	// the stale attempt instead of letting it sever, bump and reclaim a node
 	// that has already come back.  The reconciliation sweep does the same
 	// thing, but only every 30 s, and the window this closes is the one a
-	// fast restart lands in.  See docs/verification/tla-plus.md.
+	// fast restart lands in.
 	//
 	// Best effort: a failure here costs one stale fence that the sweep will
 	// still correct, and must not stop the node registering.

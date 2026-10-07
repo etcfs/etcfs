@@ -20,8 +20,8 @@ import (
 // time, and the model has to consider every order the overlap allows rather
 // than trust whichever order they happened to return in.
 //
-// The etcd side of this (the guard's compare-and-commit) is trusted, per
-// docs/verification/index.md — this checks that the daemon's own code
+// The etcd side of this (the guard's compare-and-commit) is trusted; this
+// checks that the daemon's own code
 // correctly turns "the guard rejected me" into "I stop mutating", which is
 // exactly the kind of regression a future refactor of commitGuarded could
 // introduce without etcd noticing at all.

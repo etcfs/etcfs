@@ -20,8 +20,6 @@
 # checks them. Run it after a chaos scenario, while the cluster from that
 # scenario is still up (or at least the history_data volume still exists) —
 # chaos-lib.sh's teardown removes it along with everything else.
-#
-# See docs/verification/porcupine.md.
 
 set -euo pipefail
 

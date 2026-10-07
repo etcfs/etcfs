@@ -406,8 +406,8 @@ func (f *restartingFencer) Fence(ctx context.Context, _, _ string) error {
 // completion against it: the node came back healthy, was cut off from the
 // device, and was left with a cached startGen one behind the cluster's, so
 // every write it made failed EIO for the life of the process while nothing
-// reported it as unhealthy.  Found by TLC, not by fault injection -- see
-// docs/verification/tla-plus.md.
+// reported it as unhealthy.  Found by TLC (FencingNoIncarnationCheck in
+// etcfs-tla-specs), not by fault injection.
 func TestController_AbandonsFenceWhenNodeRestartsMidFence(t *testing.T) {
 	c, store, ctx := testController(t, "controller-node")
 	cli := etcdtest.Client(t)

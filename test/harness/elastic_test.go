@@ -317,7 +317,7 @@ func TestElastic_ConcurrentJoin(t *testing.T) {
 
 	// No arena may be handed to two nodes — that is the hazard a broken CAS
 	// retry produces, and the one a restarting node that rebuilt from every
-	// node's arenas would hit by adopting a live peer's disk range (see kleppmann-stale-write-analysis.md).
+	// node's arenas would hit by adopting a live peer's disk range.
 	seenArenas := make(map[uint64]bool)
 	for _, r := range results {
 		require.NoError(t, r.joinErr, "join must succeed for %s", r.nodeID)

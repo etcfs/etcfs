@@ -165,7 +165,7 @@ func (m *Manager) RebalanceArena(ctx context.Context, fromNode, toNode string, a
 	}
 	if gen == 0 {
 		return fmt.Errorf("rebalance arena %d: source node %s has not been fenced — "+
-			"rebalancing a live node's arena is unsafe, see kleppmann-stale-write-analysis.md",
+			"rebalancing a live node's arena would give its range to a second writer",
 			arenaID, fromNode)
 	}
 
