@@ -26,20 +26,19 @@ EtcFS loses — in the
 [benchmark overview](https://github.com/etcfs/etcfs-docs/blob/main/docs/reports/benchmark-reports/overview.md).
 
 - **Recovery with no fence device and no journal replay.** A node is powered off
-  mid-write holding locks; a survivor takes over its file in **2.19 s** and never
-  stops serving its own I/O. **10.3x faster than GlusterFS** — and GFS2, NFS and
-  JuiceFS never recovered inside 180 s, GFS2's survivors stopping entirely until
-  an external STONITH device confirms the kill.
+  mid-write holding locks; a survivor takes over its file in **3.0–3.5 s**
+  (median 3.11 s over eight runs) and keeps serving its own I/O. **About 7x
+  faster than GlusterFS** — and GFS2, NFS and JuiceFS never recovered inside
+  180 s; GFS2's survivors stopped even with a `fence_aws` STONITH device
+  confirming the kill.
 - **Elastic membership, no stop-the-world.** A node leaving or joining under load
   stalls the others **0.09–0.11 s** and costs them 7.2% / 11.3% of bandwidth —
   about **half GFS2's cost**, which suspends its DLM lockspace on every
   membership change. Three leave/rejoin cycles under load: 3.02%.
-- **A far tighter tail.** At the same random-write throughput as the kernel
-  filesystems, p99 write latency is **24x better than GFS2**, 16x better than
-  GlusterFS, 13.6x better than NFS; read p99 **21.9x better than GFS2**.
 - **Scales where the directory lock stops others.** Over a 2 → 6 node sweep
-  shared-directory metadata throughput climbs **+34%** while GFS2 **loses 47%**
-  of its own; disjoint-workload bandwidth climbs 253 → 282 MiB/s.
+  shared-directory metadata throughput climbs **+79%** while GFS2 **loses 44%**
+  of its own (GFS2 is still 1.7x faster at six nodes); disjoint-workload
+  bandwidth climbs 265 → 290 MiB/s.
 - **Handoff at device speed.** A file written on one node reads back on another
   at **255.95 MiB/s** against a 254.14 MiB/s raw-device ceiling, with
   time-to-first-byte flat at 69–112 ms from 1 MiB to 8 GiB — only the extent map
@@ -102,34 +101,26 @@ file the dead node held the lock on.
 
 | Backend | takes over the dead node's file | survivor's own I/O |
 |---|---|---|
-| **EtcFS** | **2.19 s** | never stopped (0.11 s worst gap) |
+| **EtcFS** | **3.0–3.5 s** (8 runs) | never stopped (≤1.5 s worst gap) |
 | gluster | 22.64 s | continued, 78 s worst gap |
 | gfs2 | never, inside 180 s | **stopped and stayed stopped** |
 | nfs | never | client hung indefinitely |
 | juicefs | never | 3,356 errors, no recovery |
 
 GFS2's DLM lockspace goes to `kern_stop` / "wait fencing" and stops granting
-locks to *anyone* on the surviving node until a fence device confirms the kill —
-this harness configures none, which is a caveat the
+locks on the surviving node. With a `fence_aws` STONITH device configured, the
+fence was confirmed and the lockspace still stayed stopped; whether that is GFS2
+or the harness's DLM–pacemaker wiring is not established, and the
 [report](https://github.com/etcfs/etcfs-docs/blob/main/docs/reports/benchmark-reports/node-kill-recovery.md)
-states plainly.
-
-**Where EtcFS wins — the latency tail.** Per competitor, at effectively the same
-random-write throughput (934 IOPS against gluster's 1041 and gfs2's 973):
-
-| vs. | their p99 write | EtcFS advantage |
-|---|---|---|
-| gfs2 | 432.1 ms | **24x better** |
-| gluster | 288.8 ms | **16x better** |
-| nfs | 244.3 ms | **13.6x better** |
-| juicefs | 61.1 ms | 3.4x better, at 2.4x its throughput |
+says so.
 
 **Where EtcFS loses.** Everything that costs a Raft commit:
 
 | Case | EtcFS | Best competitor | Deficit |
 |---|---|---|---|
-| 80k-file untar | 2244 s | 29.8 s (gfs2) | **75x slower** |
-| Shared-directory metadata, 3 nodes | 327 ops/s | 1515 ops/s (gfs2) | **4.6x slower** |
+| 80k-file untar | 1452.5 s | 18.9 s (gfs2) | **77x slower** |
+| Shared-directory metadata, 3 nodes | 405 ops/s | 2063 ops/s (gfs2) | **5.1x slower** |
+| 4 KiB random p99, matched load | 12.4 ms | 8.1 ms (gfs2) | **1.5x worse** |
 | O_DSYNC 4 KiB writes | 155 IOPS | 989 (gfs2) | **6.4x slower** |
 | `du -s` over 80k files | 128 s | 0.41 s (nfs) | **312x slower** |
 
