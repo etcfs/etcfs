@@ -43,6 +43,8 @@ compare_client_nodes "${ETCFS_ELASTIC_NODES:-3}"
 
 compare_begin
 compare_mount
+# aggregate_mibps globs these JSONs, so a previous run's files would be summed in.
+rm -f "$RESULTS_DIR"/elastic-*.json
 [[ "${#BENCH_NODES[@]}" -ge 3 ]] || die "elasticity needs a node to cycle and two to keep writing"
 
 JOINER="$(compare_elastic_joiner)"

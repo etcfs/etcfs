@@ -132,11 +132,12 @@ logging {
     sleep 5
 
     dev=$(compare_shared_device "${COMPARE_PUB_IPS[0]}")
-    # One journal per node, allocated at mkfs and never afterwards — the
-    # structural limit the scaling scenarios exist to show.
+    # One journal per node by default. COMPARE_GFS2_JOURNALS formats fewer, so
+    # the nodes past that count stay unmounted for bench-gfs2-journal-add.sh.
+    local journals="${COMPARE_GFS2_JOURNALS:-${#COMPARE_PUB_IPS[@]}}"
     $SSH_CMD "ec2-user@${COMPARE_PUB_IPS[0]}" \
-        "sudo mkfs.gfs2 -O -p lock_dlm -t comparegfs2:vol1 -j ${#COMPARE_PUB_IPS[@]} $dev"
-    for ip in "${COMPARE_PUB_IPS[@]}"; do
+        "sudo mkfs.gfs2 -O -p lock_dlm -t comparegfs2:vol1 -j $journals $dev"
+    for ip in "${COMPARE_PUB_IPS[@]:0:$journals}"; do
         $SSH_CMD "ec2-user@$ip" "sudo mkdir -p /mnt/compare-gfs2 && sudo mount -t gfs2 -o noatime $dev /mnt/compare-gfs2"
     done
     MOUNT_PATH=/mnt/compare-gfs2
