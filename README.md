@@ -5,54 +5,53 @@
 [![codecov](https://codecov.io/gh/etcfs/etcfs/branch/main/graph/badge.svg)](https://codecov.io/gh/etcfs/etcfs)
 [![Docs](https://img.shields.io/badge/docs-mkdocs-blue)](https://etcfs.github.io/etcfs-docs/)
 
-**A cluster-aware filesystem for shared raw block devices — the piece AWS and Kubernetes tell you to bring yourself.**
+**A cluster filesystem for shared raw block devices, with all metadata in etcd.**
 
-AWS EBS Multi-Attach will attach one io2 volume to sixteen instances at once. Kubernetes will hand it to you as a `ReadWriteMany` `volumeMode: Block` volume. Both then stop, and [the EBS CSI driver's documentation says why](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/blob/master/docs/multi-attach.md): using it safely "requires application-level coordination (e.g. via I/O fencing)", and failure to do so "can result in data loss and silent data corruption". Using ext4 on a Multi-Attach volume and mount it twice and it will get corrupted. The platform gives you the shared device and declines to make it safe.
+AWS EBS Multi-Attach attaches one io2 volume to up to sixteen instances, and Kubernetes exposes it as a `ReadWriteMany`, `volumeMode: Block` volume. Neither coordinates the writers. [The EBS CSI driver's documentation](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/blob/master/docs/multi-attach.md) says that using such a volume safely "requires application-level coordination (e.g. via I/O fencing)", and that without it the result "can result in data loss and silent data corruption". An ordinary filesystem such as ext4, mounted on two instances at once, corrupts the volume.
 
-EtcFS is what goes on top. **etcd/Raft is the only source of durable truth**, and the shared device holds nothing but file bytes. No on-disk filesystem format, no kernel module, no bespoke distributed lock manager — a userspace FUSE daemon on each node presents POSIX semantics, backed by etcd for everything structural (namespace, inode metadata, locks, allocation) and direct block I/O for file content. The I/O fencing that AWS says you need is three independent layers, one of them enforced by the drive itself — see [Fencing](https://github.com/etcfs/etcfs-docs/blob/main/docs/architecture/fencing/self-fencing-watchdog.md).
+EtcFS provides that coordination. etcd's Raft log holds every durable structural fact (namespace, inode metadata, locks, allocation), and the shared device holds only file bytes. There is no on-disk filesystem format, no kernel module and no separate distributed lock manager: a FUSE daemon on each node presents POSIX semantics, reads and writes metadata in etcd, and reads and writes file content directly on the block device. I/O fencing has three independent layers, one of them enforced by the device itself; see [Fencing](https://github.com/etcfs/etcfs-docs/blob/main/docs/architecture/fencing/self-fencing-watchdog.md).
 
-Traditional cluster filesystems (GFS2, OCFS2) keep durable truth *on disk* — inodes, bitmaps, a journal — and bolt a distributed lock manager on top to arbitrate access to it. EtcFS inverts that: etcd's replicated Raft log *is* the durable truth for every structural fact, and the disk is demoted to a flat, unformatted array of bytes addressed by extents `(logical_offset, disk_offset, length)` recorded in etcd. Atomicity, consistency, and metadata recovery come from etcd's existing quorum-replicated log almost for free, instead of a bespoke recovery protocol — at the cost of every structural operation being an etcd round trip, mitigated by client-side caching and keeping the hot data path (reads/writes to already-allocated extents) on direct block I/O with no etcd round trip at all.
+GFS2 and OCFS2 keep durable state on the disk (inodes, bitmaps, a journal) and use a distributed lock manager to arbitrate access to it. EtcFS keeps that state in etcd instead, and the disk is an unformatted array of bytes addressed by extents `(logical_offset, disk_offset, length)` recorded in etcd. Atomicity, consistency and metadata recovery come from etcd's replicated log rather than from a filesystem-specific recovery protocol. The cost is that every structural operation is an etcd round trip. Client-side caching reduces it, and reads and writes to already-allocated extents go to the device without contacting etcd.
 
 Status: implemented and under hardening. Cross-node `fcntl`/`flock` advisory
-locks are the one accepted-but-unenforced POSIX surface — see
+locks are accepted but not enforced between nodes; read
 [Consistency and durability](https://github.com/etcfs/etcfs-docs/blob/main/docs/architecture/consistency/consistency-and-durability-model.md)
-before relying on this for real data.
+before relying on EtcFS for real data.
 
-## What that inversion buys
+## Measured results
 
 Measured against GFS2, GlusterFS, self-hosted NFS and JuiceFS, each on its own
-isolated AWS cluster, all in one session. Full ledger — including every scenario
-EtcFS loses — in the
-[benchmark overview](https://github.com/etcfs/etcfs-docs/blob/main/docs/reports/benchmark-reports/overview.md).
+isolated AWS cluster. The
+[benchmark overview](https://github.com/etcfs/etcfs-docs/blob/main/docs/reports/benchmark-reports/overview.md)
+lists every scenario, including those where EtcFS is slower.
 
-- **Recovery with no fence device and no journal replay.** A node is powered off
-  mid-write holding locks; a survivor takes over its file in **3.0–3.5 s**
-  (median 3.11 s over eight runs) and keeps serving its own I/O. **About 7x
-  faster than GlusterFS** — and GFS2, NFS and JuiceFS never recovered inside
-  180 s; GFS2's survivors stopped even with a `fence_aws` STONITH device
-  confirming the kill.
-- **Elastic membership, no stop-the-world.** A node leaving or joining under load
-  stalls the others **0.09–0.11 s** and costs them 7.2% / 11.3% of bandwidth —
-  about **half GFS2's cost**, which suspends its DLM lockspace on every
-  membership change. Three leave/rejoin cycles under load: 3.02%.
-- **Scales where the directory lock stops others.** Over a 2 → 6 node sweep
-  shared-directory metadata throughput climbs **+79%** while GFS2 **loses 44%**
-  of its own (GFS2 is still 1.7x faster at six nodes); disjoint-workload
-  bandwidth climbs 265 → 290 MiB/s.
-- **Handoff at device speed.** A file written on one node reads back on another
-  at **255.95 MiB/s** against a 254.14 MiB/s raw-device ceiling, with
-  time-to-first-byte flat at 69–112 ms from 1 MiB to 8 GiB — only the extent map
-  crosses the network.
-- **A coherent page cache that is free to read through.** 600,852 IOPS on a
-  RAM-resident set with **zero reads reaching the daemon**, while the pages stay
-  under the inode's lock and are invalidated before it is yielded.
-- **Grow the volume under a running cluster.** New space allocatable in
-  **3.90 s**, no restart and no remount anywhere.
-- **Correctness checked by tools EtcFS did not write.** **8,789/8,789**
-  pjdfstest POSIX assertions pass; Porcupine finds every recorded history
-  linearizable against four models (**20/20** chaos assertions, 7/7 model runs);
-  the fencing protocol is TLA+ model-checked to **11.7 M states**, with four
-  deliberately broken variants producing counterexamples, and runs in CI.
+- **Recovery without a fence device or journal replay.** A node is powered off
+  mid-write while holding locks; a survivor takes over its file in **3.0–3.5 s**
+  (median 3.11 s over eight runs) and keeps serving its own I/O. GlusterFS took
+  22.3–22.7 s; GFS2, NFS and JuiceFS did not recover the file inside 180 s, and
+  GFS2's survivors stopped even when `fence_aws` confirmed the fence.
+- **Membership changes under load.** A node leaving or joining stalls the
+  others for **0.08–0.11 s** and costs them 6.8% and 11.5% of bandwidth, against
+  19.2% and 23.8% for GFS2, which suspends its DLM lockspace on every membership
+  change. A GFS2 node with no free journal needs `gfs2_jadd` first; an EtcFS
+  node needs no equivalent step.
+- **Metadata throughput grows with node count.** From two nodes to six,
+  shared-directory metadata throughput rises **79%** while GFS2's falls **44%**
+  (GFS2 is still 1.7x faster at six nodes); disjoint write bandwidth rises from
+  265 to 290 MiB/s.
+- **Cross-node handoff.** A file written on one node reads back on another at
+  **253.8 MiB/s** for 8 GiB, with time-to-first-byte between 58 and 81 ms from
+  1 MiB to 8 GiB, because only the extent map crosses the network.
+- **Coherent page cache.** 600,852 IOPS on a RAM-resident working set with
+  **no reads reaching the daemon**; pages are cached while the node holds the
+  inode's lock and dropped before the lock is released.
+- **Growing the volume under a running cluster.** New space is allocatable in
+  **3.90 s**, with no restart and no remount.
+- **Correctness checked with external tools.** **8,789/8,789** pjdfstest POSIX
+  assertions pass; Porcupine finds every recorded history linearizable against
+  four models (**20/20** chaos assertions, 7/7 model runs); the fencing protocol
+  is TLA+ model-checked to **11.7 M states**, four deliberately broken variants
+  produce counterexamples, and the 2-node models run in CI.
 
 ## Quick start
 
@@ -86,69 +85,63 @@ etcfsctl --etcd-endpoints=http://127.0.0.1:2379 status
 Full flag reference and every config knob:
 [Configuration](https://github.com/etcfs/etcfs-docs/blob/main/docs/deployment/configuration.md).
 
-## How it measures up
+## Comparison
 
 Five filesystems, each on its own isolated AWS cluster with a dedicated
-1000-IOPS io2 Multi-Attach volume — `scripts/bench/compare/`. Every comparison
-below was measured in one session on 2026-08-24/25. Full method, caveats and the
-scenario-by-scenario ledger of wins and losses:
-[Benchmark overview](https://github.com/etcfs/etcfs-docs/blob/main/docs/reports/benchmark-reports/overview.md).
+1000-IOPS io2 Multi-Attach volume (`scripts/bench/compare/`). The node-kill and
+cost tables below are from `m5.large` runs on 2026-10-16/17; method, caveats and
+the full list of scenarios are in the
+[benchmark overview](https://github.com/etcfs/etcfs-docs/blob/main/docs/reports/benchmark-reports/overview.md).
 
-**Where EtcFS wins — losing a node.** All five backends take one identical
-fault: the victim machine is powered off, nothing releases a lock, nothing runs
-an exit path. The number that matters is how long a survivor takes to write a
-file the dead node held the lock on.
+**Losing a node.** Every backend takes the same fault: the victim machine is
+powered off, so nothing releases a lock and nothing runs an exit path. The
+table shows how long a survivor takes to write a file the dead node held the
+lock on.
 
 | Backend | takes over the dead node's file | survivor's own I/O |
 |---|---|---|
-| **EtcFS** | **3.0–3.5 s** (8 runs) | never stopped (≤1.5 s worst gap) |
-| gluster | 22.64 s | continued, 78 s worst gap |
-| gfs2 | never, inside 180 s | **stopped and stayed stopped** |
-| nfs | never | client hung indefinitely |
-| juicefs | never | 3,356 errors, no recovery |
+| **EtcFS** | **3.0–3.5 s** (8 runs) | kept writing (≤1.5 s worst gap) |
+| gluster | 22.3–22.7 s (3 runs) | kept writing, 77–78 s worst gap |
+| gfs2 | never, inside 180 s | **stopped for the rest of the run** |
+| nfs | never | client hung on the hard mount |
+| juicefs | never (`t3.medium`) | 3,356 errors, no recovery |
 
 GFS2's DLM lockspace goes to `kern_stop` / "wait fencing" and stops granting
 locks on the surviving node. With a `fence_aws` STONITH device configured, the
-fence was confirmed and the lockspace still stayed stopped; whether that is GFS2
-or the harness's DLM–pacemaker wiring is not established, and the
-[report](https://github.com/etcfs/etcfs-docs/blob/main/docs/reports/benchmark-reports/node-kill-recovery.md)
-says so.
+fence was confirmed and the lockspace still stayed stopped; whether that comes
+from GFS2 or from the harness's DLM–Pacemaker integration is not established
+([report](https://github.com/etcfs/etcfs-docs/blob/main/docs/reports/benchmark-reports/node-kill-recovery.md)).
 
-**Where EtcFS loses.** Everything that costs a Raft commit:
+**Where EtcFS is slower.** Every case that costs a Raft commit or a FUSE round
+trip:
 
-| Case | EtcFS | Best competitor | Deficit |
+| Case | EtcFS | Best competitor | Ratio |
 |---|---|---|---|
 | 80k-file untar | 1452.5 s | 18.9 s (gfs2) | **77x slower** |
 | Shared-directory metadata, 3 nodes | 405 ops/s | 2063 ops/s (gfs2) | **5.1x slower** |
-| 4 KiB random p99, matched load | 12.4 ms | 8.1 ms (gfs2) | **1.5x worse** |
+| 4 KiB random write p99, matched load | 12.4 ms | 8.0 ms (gfs2) | **1.5x higher** |
 | O_DSYNC 4 KiB writes | 155 IOPS | 989 (gfs2) | **6.4x slower** |
 | `du -s` over 80k files | 128 s | 0.41 s (nfs) | **312x slower** |
 
-One Raft commit per structural mutation is the standing cost of putting durable
-truth in etcd, and it is not a rounding error. It does come down: taking the
-inode-number reservation and the parent directory's timestamp off the per-file
-path moved the first two rows from 112x and 8.4x. Two more have since gone — the
-inode's lock key rides the create transaction, and evicted keys are released a
-batch at a time — so a created-and-written file costs two commits and a fraction
-where it cost six. The untar row does not move with them: that scenario is no
-longer commit-bound, and the remaining effect is smaller than the benchmark's
-own spread ([why](https://github.com/etcfs/etcfs-docs/blob/main/docs/reports/benchmark-reports/smallfile-storm.md)).
+A created and written file costs a little over two commits, before any
+`chmod` or `chown` the application adds (`tar` adds two, for 4.18 in all): the create
+transaction carries the name, the inode and the node's lock key, inode numbers
+are reserved in blocks, the parent directory's timestamp is published in
+batches, and evicted lock keys are released a batch at a time. The transaction
+that publishes a name still commits before `create()` returns, because
+[deferring it would answer `create()` before its exclusivity check has run](https://github.com/etcfs/etcfs-docs/blob/main/docs/design-decisions.md#creates-are-not-deferred-into-a-batch).
+The [small-file storm report](https://github.com/etcfs/etcfs-docs/blob/main/docs/reports/benchmark-reports/smallfile-storm.md)
+breaks down where the untar's time goes.
 
-It does not come down to nothing — the transaction that publishes a name commits
-before `create()` returns, and
-[deferring that is a wrong answer rather than a durability trade](https://github.com/etcfs/etcfs-docs/blob/main/docs/design-decisions.md#creates-are-not-deferred-into-a-batch).
+**Where the backends tie.** On a warm page cache all five reach 530–620k IOPS
+on a RAM-resident working set, the speed of memory. EtcFS gets there while
+caching pages only under the inode's lock, with no reads reaching the daemon
+during the warm pass.
 
-**Where it makes no difference.** A warm page cache: all five converge on
-530–620k IOPS on a RAM-resident working set, which is RAM, not a filesystem.
-EtcFS reaches it while holding data pages only under the inode's lock (zero
-reads reached the daemon across the warm pass), so the coherence obligation is
-free here — but it is not an advantage.
-
-**Where the caches earn their keep.** A missing name costs 110 us cold and
-2.21 us warm — second and first of the five respectively, against 1474 us and
-8.81 us before the directory name-set prefetch and a one-minute entry timeout
-backed by a cluster-wide watch. gluster and juicefs do not cache absences at
-all.
+**Negative lookups.** A missing name costs 110 µs cold and 2.21 µs warm,
+second and first of the five. EtcFS answers misses from the directory's
+prefetched name set and keeps cached entries for a minute, invalidated by a
+cluster-wide watch; gluster and juicefs do not cache absences.
 
 ## Documentation
 
