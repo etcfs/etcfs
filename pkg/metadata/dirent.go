@@ -746,8 +746,8 @@ func (s *Store) unlinkInodeOps(rec *InodeRecord) []clientv3.Op {
 	ops := []clientv3.Op{
 		clientv3.OpDelete(InodeKey(rec.Ino)),
 		// Extended attributes are owned outright by the inode, so they go with
-		// it.  Left behind they would leak a key per attribute, and — worse —
-		// a later inode reusing this number would inherit them.
+		// it.  Left behind they would leak a key per attribute that no check
+		// looks for, since inode numbers are never reused to claim them.
 		clientv3.OpDelete(XattrPrefix(rec.Ino), clientv3.WithPrefix()),
 	}
 	// A symlink's target lives in its own key, which nothing else references —
