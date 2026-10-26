@@ -299,18 +299,35 @@ func (s *Service) commitWriteOp(ctx context.Context, lk *heldLock, w *writeOp) (
 		// either the cached view is behind or the serializable read was served
 		// by a member that had not caught up.  Re-read from the leader and
 		// propose again.
+		//
+		// A rejection is also what a committed attempt whose reply was lost
+		// looks like, since commitGuarded's retry re-proposes the same
+		// comparisons.  Proposing again would publish these blocks under a
+		// second chunk and reclaim the first as covered, freeing blocks a
+		// published extent names; so a proposal found in etcd is adopted.
 		s.log.Debug("write: chunk numbering was stale, retrying linearizably", "ino", w.ino)
+		planned := w.existing
 		if xerr := w.readExtents(ctx); xerr != nil {
 			w.freeRuns()
 			s.log.Warn("write: cannot read existing extents", "ino", w.ino, "error", xerr)
 			return int32Resp(errIO), nil
 		}
-		cmps, ops = w.proposal()
-		committed, fenced, rev, cerr = s.commitGuarded(ctx, cmps, ops)
+		if landedRev, landed := proposalLanded(w.existing, ops); landed {
+			s.log.Warn("write: adopted a commit whose reply was lost", "ino", w.ino)
+			w.existing = planned
+			committed, rev = true, landedRev
+		} else {
+			cmps, ops = w.proposal()
+			committed, fenced, rev, cerr = s.commitGuarded(ctx, cmps, ops)
+		}
 	}
 	if cerr != nil {
-		w.freeRuns()
-		s.log.Warn("write: metadata commit failed", "ino", w.ino, "error", cerr)
+		// Not freed: a transaction that timed out or lost its connection may
+		// still have been applied, and an extent published over blocks on the
+		// free list is overwritten by the next write that is handed them.
+		// Restart rebuilds the free list from etcd, which reclaims the blocks
+		// if the commit did not land.
+		s.log.Warn("write: metadata commit failed; its blocks stay allocated", "ino", w.ino, "error", cerr)
 		return int32Resp(errIO), nil
 	}
 	if fenced {
@@ -346,6 +363,30 @@ func (s *Service) commitWriteOp(ctx context.Context, lk *heldLock, w *writeOp) (
 	w.reclaimDeferred(ctx)
 
 	return writtenResp(uint32(w.dataLen)), nil
+}
+
+// proposalLanded reports whether every extent a write proposed is in published
+// with exactly the value proposed, and the revision it landed at. The writer
+// holds the inode's exclusive lock and the values name its own freshly
+// allocated blocks, so only this proposal can have written them.
+func proposalLanded(published []metadata.Extent, ops []clientv3.Op) (int64, bool) {
+	values := make(map[string]metadata.Extent, len(published))
+	for _, ext := range published {
+		values[ext.Key] = ext
+	}
+	var rev int64
+	for _, op := range ops {
+		key := string(op.KeyBytes())
+		if !op.IsPut() || !strings.HasPrefix(key, metadata.PrefixExtent) {
+			continue
+		}
+		ext, found := values[key]
+		if !found || ext.Encode() != string(op.ValueBytes()) {
+			return 0, false
+		}
+		rev = ext.ModRevision
+	}
+	return rev, rev != 0
 }
 
 // txnReplay is what one transaction does to one inode, decoded once: the record
