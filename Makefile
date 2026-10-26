@@ -117,8 +117,10 @@ lint: lint-go lint-c lint-sh
 # cannot read a newer one's — so a machine with a newer Go installed reports
 # every package as broken ("undefined: yaml", "l.Error undefined") while the
 # build, the tests and CI are all clean.  GOTOOLCHAIN fetches the pinned
-# version on demand and leaves the rest of the machine alone.
-GO_TOOLCHAIN := go$(shell awk '/^go [0-9]/{print $$2; exit}' go.mod)
+# version on demand and leaves the rest of the machine alone.  It must name a
+# release (go.mod's toolchain line, e.g. go1.26.6): a bare language version
+# such as go1.26 is rejected.
+GO_TOOLCHAIN := $(shell awk '/^toolchain go[0-9]/{print $$2; exit}' go.mod)
 
 lint-go:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) golangci-lint run ./...
