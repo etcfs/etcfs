@@ -615,19 +615,28 @@ func (s *Store) AtomicRename(ctx context.Context, oldParent uint64, oldName stri
 	// A directory moved beneath itself detaches its whole subtree: the entries
 	// still exist, but no path from the root reaches them, and no later
 	// operation can tell that from ordinary data.
+	//
+	// The check is a read, so the transaction pins every dirent on the path it
+	// walked from newParent to the root. Two directory renames into each
+	// other's subtrees otherwise both pass their check and commit without
+	// touching any key the other compares, making the two directories each
+	// other's parent; with the path pinned, whichever commits second finds a
+	// link on its path changed and aborts.
+	var ancestry []clientv3.Cmp
 	if srcIsDir {
-		under, aerr := s.isDescendant(ctx, newParent, ino)
+		under, chain, aerr := s.isDescendant(ctx, newParent, ino)
 		if aerr != nil {
 			return fail("%w", aerr)
 		}
 		if newParent == ino || under {
 			return fail("destination is inside the directory being moved (%w)", ErrInvalid)
 		}
+		ancestry = chain
 	}
 
 	cmps := append([]clientv3.Cmp{
 		clientv3.Compare(clientv3.CreateRevision(DirentKey(oldParent, oldName)), ">", 0),
-	}, parentExists(newParent)...)
+	}, append(parentExists(newParent), ancestry...)...)
 	ops := []clientv3.Op{
 		DeleteDirent(oldParent, oldName),
 		PutDirent(newParent, newName, ino),
@@ -852,35 +861,46 @@ func (s *Store) commitRename(ctx context.Context, newParent uint64, cmps []clien
 //
 // The walk is bounded by the number of directories it has seen: a namespace
 // that already contains a cycle would otherwise spin here forever.
-func (s *Store) isDescendant(ctx context.Context, ino, ancestor uint64) (bool, error) {
+//
+// It also returns a comparison per dirent it walked, each pinned to the
+// revision read, so a caller can commit only if the path is still the one the
+// answer was computed from.
+func (s *Store) isDescendant(ctx context.Context, ino, ancestor uint64) (bool, []clientv3.Cmp, error) {
 	if ino == ancestor {
-		return true, nil
+		return true, nil, nil
 	}
 
 	kvs, err := s.GetPrefix(ctx, PrefixDirent)
 	if err != nil {
-		return false, fmt.Errorf("build parent index: %w", err)
+		return false, nil, fmt.Errorf("build parent index: %w", err)
 	}
-	parent := make(map[uint64]uint64, len(kvs))
+	type link struct {
+		parent uint64
+		key    string
+		rev    int64
+	}
+	parent := make(map[uint64]link, len(kvs))
 	for _, kv := range kvs {
 		p, _, ok := ParseDirentKey(string(kv.Key))
 		if !ok {
 			continue
 		}
-		parent[DecodeUint64(kv.Value)] = p
+		parent[DecodeUint64(kv.Value)] = link{p, string(kv.Key), kv.ModRevision}
 	}
 
+	var chain []clientv3.Cmp
 	for step := 0; step <= len(parent); step++ {
 		next, ok := parent[ino]
 		if !ok {
-			return false, nil // reached the root, or an unparented inode
+			return false, chain, nil // reached the root, or an unparented inode
 		}
-		if next == ancestor {
-			return true, nil
+		chain = append(chain, clientv3.Compare(clientv3.ModRevision(next.key), "=", next.rev))
+		if next.parent == ancestor {
+			return true, chain, nil
 		}
-		ino = next
+		ino = next.parent
 	}
-	return false, fmt.Errorf("parent chain from %d does not terminate", ino)
+	return false, nil, fmt.Errorf("parent chain from %d does not terminate", ino)
 }
 
 // ---- rename constants ----

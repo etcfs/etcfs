@@ -1569,3 +1569,51 @@ func TestIntegration_CreateRefusesAParentRemovedUnderIt(t *testing.T) {
 		assert.Nil(t, rec, "a create under a removed directory must write nothing")
 	}
 }
+
+// Two directory renames, each checked against the namespace before either
+// commits, must not both land when together they make the two directories each
+// other's parent: that cycle is unreachable from the root and cannot be moved
+// out of again. The guard each Txn evaluates first holds both renames until
+// both have finished their ancestor check, which forces that interleaving.
+func TestIntegration_ConcurrentDirectoryRenamesCannotFormACycle(t *testing.T) {
+	ctx := context.Background()
+	client := etcdtest.Client(t)
+	x, y := NewStore(client, "node-X"), NewStore(client, "node-Y")
+	const p, q, a, b = 9900, 9901, 9902, 9903
+
+	_, err := x.AtomicCreateDir(ctx, RootIno, "p", p, 0755, 1000, 1000)
+	require.NoError(t, err)
+	_, err = x.AtomicCreateDir(ctx, RootIno, "q", q, 0755, 1000, 1000)
+	require.NoError(t, err)
+	_, err = x.AtomicCreateDir(ctx, p, "a", a, 0755, 1000, 1000)
+	require.NoError(t, err)
+	_, err = x.AtomicCreateDir(ctx, q, "b", b, 0755, 1000, 1000)
+	require.NoError(t, err)
+
+	var arrived sync.WaitGroup
+	arrived.Add(2)
+	holdFirstTxn := func() GuardFunc {
+		var once sync.Once
+		return func() (clientv3.Cmp, uint64, bool) {
+			once.Do(func() { arrived.Done(); arrived.Wait() })
+			return clientv3.Compare(clientv3.CreateRevision("no-such-key"), "=", 0), 0, true
+		}
+	}
+	x.SetGuard(holdFirstTxn())
+	y.SetGuard(holdFirstTxn())
+
+	errs := make([]error, 2)
+	var done sync.WaitGroup
+	done.Add(2)
+	go func() { defer done.Done(); errs[0] = x.AtomicRename(ctx, p, "a", b, "a", a, 0) }()
+	go func() { defer done.Done(); errs[1] = y.AtomicRename(ctx, q, "b", a, "b", b, 0) }()
+	done.Wait()
+
+	assert.False(t, errs[0] == nil && errs[1] == nil, "both renames committed")
+	// Whichever won, both directories are still reachable from the root.
+	for _, ino := range []uint64{a, b} {
+		under, _, derr := x.isDescendant(ctx, ino, RootIno)
+		require.NoError(t, derr, "parent chain of %d", ino)
+		assert.True(t, under, "%d must be reachable from the root", ino)
+	}
+}
