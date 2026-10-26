@@ -122,6 +122,9 @@ func (w *writeOp) writeThrough() error {
 		}
 		pos += r.Length
 	}
+	if err := w.s.barrier(); err != nil {
+		return err
+	}
 	w.written = true
 	return nil
 }

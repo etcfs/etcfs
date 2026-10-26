@@ -499,36 +499,29 @@ func indexOfChunk(extents []metadata.Extent, chunk uint64) int {
 	return -1
 }
 
-// writeRun puts one run on the device.
+// writeRun puts one run on the device.  It is only the write: a caller that
+// has write barriers to honour calls barrier once its last run is written and
+// before any extent naming them is committed.
+func (s *Service) writeRun(buf []byte, diskOff uint64) error {
+	_, err := s.dev.WriteAt(buf, int64(diskOff))
+	return err
+}
+
+// barrier makes the runs written so far durable before an extent naming them is
+// committed, so a power loss cannot leave etcd pointing at bytes a volatile
+// device cache dropped.
 //
 // With O_DIRECT on a device that acknowledges a write only once it is durable —
-// an EBS io2 Multi-Attach volume — the pwrite is the whole publication: no cache
-// on this node holds the bytes, so no barrier can make another attacher see them
-// any sooner.  The three extra round trips a barrier costs are therefore behind
-// writeBarriers, for a device with a volatile write cache and
-// for buffered mode, where the page cache genuinely does hold the bytes back.
-//
-// The barrier readback is not a verification — the bytes are discarded.  It is
-// the round trip itself that matters, so one sector establishes it as well as
-// the whole buffer does.
-func (s *Service) writeRun(buf []byte, diskOff uint64) error {
-	n, err := s.dev.WriteAt(buf, int64(diskOff))
-	if err != nil {
-		return err
-	}
+// an EBS io2 Multi-Attach volume — the pwrite already is that, so the flush is
+// behind writeBarriers: for a device with a volatile write cache, and for
+// buffered mode, where the page cache holds the bytes back as well.  One
+// fdatasync covers every run the caller wrote, and a failed one fails the
+// write: committing the extent would publish bytes that may not be there.
+func (s *Service) barrier() error {
 	if !s.writeBarriers {
 		return nil
 	}
-
-	_ = s.dev.FlushDevice()
-	if err := s.dev.SyncRange(int64(diskOff), int64(n)); err != nil {
-		s.log.Warn("write: sync failed", "error", err)
-	}
-
-	readback, freeReadback := s.ioBuffer(min(len(buf), s.dev.SectorSize()))
-	_, _ = s.dev.ReadAt(readback, int64(diskOff))
-	freeReadback()
-	return nil
+	return s.syncDevice()
 }
 
 // allocateBlocks reserves device space, expanding into a fresh arena if the

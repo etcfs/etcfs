@@ -35,9 +35,9 @@ type Device struct {
 //
 // On a device attached to more than one node, buffered I/O is not a
 // degradation but a correctness change: a write lands in this node's page
-// cache, and the readback that is supposed to push it out to the other
-// attachers is served from that same cache — so the round trip proves nothing,
-// and two nodes believe they share bytes only one of them has written.
+// cache, and a read on this node is served from that same cache while the
+// other attachers read the volume — so two nodes believe they share bytes only
+// one of them has written.
 //
 // Use OpenBuffered only where the device is not shared.
 func Open(path string) (*Device, error) {
@@ -183,23 +183,14 @@ func (d *Device) WriteAt(buf []byte, offset int64) (int, error) {
 	return n, err
 }
 
-func (d *Device) SyncRange(offset int64, length int64) error {
-	align := int64(d.sectorSize)
-	offAligned := offset & ^(align - 1)
-	lenAligned := length + (offset - offAligned)
-	_, _, errno := syscall.Syscall6(syscall.SYS_SYNC_FILE_RANGE, uintptr(d.fd),
-		uintptr(offAligned), uintptr(lenAligned),
-		syncFileRangeWrite|syncFileRangeWaitAfter, 0, 0)
-	if errno != 0 {
-		return errno
-	}
-	return nil
+// Sync makes every write this descriptor has completed durable. On a block
+// device fdatasync writes back the dirty page cache and then sends the device a
+// cache flush, so a write acknowledged into a volatile write cache is on stable
+// media once it returns; O_DIRECT and sync_file_range reach the device but
+// never ask it to empty that cache.
+func (d *Device) Sync() error {
+	return unix.Fdatasync(d.fd)
 }
-
-const (
-	syncFileRangeWrite     uintptr = 2
-	syncFileRangeWaitAfter uintptr = 4
-)
 
 func (d *Device) Close() error {
 	return syscall.Close(d.fd)

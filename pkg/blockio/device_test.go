@@ -65,7 +65,7 @@ func TestReadWriteAligned(t *testing.T) {
 	assert.Equal(t, pattern, readBuf[:ss])
 }
 
-func TestSyncRange(t *testing.T) {
+func TestSync(t *testing.T) {
 	f, err := os.CreateTemp("", "blockio-test-*")
 	require.NoError(t, err)
 	name := f.Name()
@@ -85,7 +85,7 @@ func TestSyncRange(t *testing.T) {
 
 	_, err = dev.WriteAt(buf[:ss], 0)
 	require.NoError(t, err)
-	assert.NoError(t, dev.SyncRange(0, int64(ss)))
+	assert.NoError(t, dev.Sync())
 }
 
 func TestAlignedBuffer(t *testing.T) {

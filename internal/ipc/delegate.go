@@ -583,6 +583,9 @@ func (s *Service) flushData(p *pending) error {
 	if firstErr != nil {
 		return firstErr
 	}
+	if err := s.barrier(); err != nil {
+		return err
+	}
 
 	p.data = nil
 	return nil

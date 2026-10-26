@@ -71,12 +71,12 @@ type Config struct {
 	// mounts and file-backed test devices.
 	AllowBufferedIO bool
 
-	// WriteBarriers restores the device flush, range sync and readback after
-	// every write, and the device flush before every read.  Off by default:
-	// with O_DIRECT on a volume that acknowledges a write only once it is
-	// durable, they are three device round trips per write that publish
-	// nothing the write itself has not already published.  A device with a
-	// volatile write cache needs them; buffered mode turns them on regardless.
+	// WriteBarriers adds an fdatasync of the device after every write, before
+	// its extent is committed, and a buffer-cache flush before every read.  Off
+	// by default: with O_DIRECT on a volume that acknowledges a write only once
+	// it is durable, the cache flush makes nothing more durable than the write
+	// itself did.  A device with a volatile write cache needs it; buffered mode
+	// turns it on regardless.
 	WriteBarriers bool
 
 	// MetadataFlushInterval bounds how long a write acknowledged to the kernel
@@ -240,7 +240,7 @@ func Parse() *Config {
 	flag.BoolVar(&cfg.AllowBufferedIO, "allow-buffered-io", false,
 		"Permit opening the data device without O_DIRECT; unsafe on a device attached to more than one node")
 	flag.BoolVar(&cfg.WriteBarriers, "write-barriers", false,
-		"Flush the device cache, sync the range and read it back after every write; needed only on a device with a volatile write cache that does not publish an acknowledged O_DIRECT write to its other attachers (always on without O_DIRECT)")
+		"Flush the device write cache (fdatasync) after every write, before its extent is committed; needed only on a device that acknowledges a write into a volatile cache (always on without O_DIRECT)")
 	flag.StringVar(&flushInterval, "metadata-flush-interval", "100ms",
 		"How long a write's extent may stay buffered in memory before it is published to etcd; 0 commits every write before acknowledging it (durable, one Raft commit per write)")
 	flag.StringVar(&entryTimeout, "entry-timeout", DefaultEntryTimeout.String(),

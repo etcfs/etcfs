@@ -32,9 +32,12 @@ type Service struct {
 	dev          *blockio.Device
 	notifyServer *notifyServer
 
-	// writeBarriers adds a device flush, a range sync and a readback to every
-	// write, and a device flush to every read.  See writeRun.
+	// writeBarriers makes every write durable with a device cache flush before
+	// its extent is committed, and adds a buffer-cache flush to every read.  See
+	// barrier.
 	writeBarriers bool
+	// syncDevice is the barrier's flush, dev.Sync unless a test replaces it.
+	syncDevice func() error
 
 	// flushInterval is how long an inode's extents may stay buffered in RAM
 	// before they are published to etcd.  Zero disables deferral entirely, so
@@ -183,7 +186,8 @@ type Options struct {
 	// write updates the inode's size and nothing else.
 	Device *blockio.Device
 
-	// WriteBarriers adds a flush, a range sync and a readback to every write. It
+	// WriteBarriers flushes the device cache after every write, before its
+	// extent is committed. It
 	// is forced on for a device opened without O_DIRECT, where the bytes really
 	// do sit in this node's page cache until something pushes them out.
 	WriteBarriers bool
@@ -263,6 +267,7 @@ func (s *Service) pagesCacheable() bool {
 // really do sit in this node's page cache until something pushes them out.
 func (s *Service) setBlockDevice(dev *blockio.Device, barriers bool) {
 	s.dev = dev
+	s.syncDevice = dev.Sync
 	s.writeBarriers = barriers || !dev.IsDirect()
 	// The allocator hands out arenas by multiplying an ID by the arena size,
 	// with nothing else to stop it running past the end of the device.
