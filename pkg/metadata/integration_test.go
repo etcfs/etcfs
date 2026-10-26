@@ -841,10 +841,19 @@ func TestIntegration_DeepMkdir(t *testing.T) {
 
 // ---- rename over an existing target ----
 
+// seedParentDir creates parent as a directory under the root, since a name can only
+// be added to a directory whose inode exists.
+func seedParentDir(t *testing.T, s *Store, parent uint64) {
+	t.Helper()
+	_, err := s.AtomicCreateDir(context.Background(), RootIno, fmt.Sprintf("dir-%d", parent), parent, 0755, 1000, 1000)
+	require.NoError(t, err)
+}
+
 // renameFixture seeds a parent directory holding one file per name given.
 func renameFixture(t *testing.T, s *Store, parent uint64, names ...string) map[string]uint64 {
 	t.Helper()
 	ctx := context.Background()
+	seedParentDir(t, s, parent)
 	inos := make(map[string]uint64, len(names))
 	for i, name := range names {
 		ino := parent*1000 + uint64(i) + 1
@@ -935,6 +944,7 @@ func TestIntegration_RenameRejectsNonEmptyDirectoryTarget(t *testing.T) {
 	ctx := context.Background()
 	s := testStore(t, "node-A")
 	const parent, srcDir, dstDir = 8400, 8401, 8402
+	seedParentDir(t, s, parent)
 
 	_, err := s.AtomicCreateDir(ctx, parent, "src", srcDir, 0755, 1000, 1000)
 	require.NoError(t, err)
@@ -957,6 +967,7 @@ func TestIntegration_RenameRejectsDirectoryIntoItsOwnSubtree(t *testing.T) {
 	ctx := context.Background()
 	s := testStore(t, "node-A")
 	const parent, top, mid, deep = 8500, 8501, 8502, 8503
+	seedParentDir(t, s, parent)
 
 	_, err := s.AtomicCreateDir(ctx, parent, "top", top, 0755, 1000, 1000)
 	require.NoError(t, err)
@@ -1532,4 +1543,29 @@ func mustReleaseLock(t *testing.T, s *Store, ctx context.Context, ino uint64, mo
 	released, err := s.ReleaseLock(ctx, ino, mode, holder)
 	require.NoError(t, err)
 	require.True(t, released, "the lock key was already gone")
+}
+
+// A create resolves its parent before committing, and an rmdir on another node
+// can land in between. The create must then fail rather than publish a name and
+// an inode under a directory that no longer exists, where no path from the
+// root reaches them and no orphan check looks.
+func TestIntegration_CreateRefusesAParentRemovedUnderIt(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t, "node-A")
+	const dir = 9800
+
+	_, err := s.AtomicCreateDir(ctx, RootIno, "doomed", dir, 0755, 1000, 1000)
+	require.NoError(t, err)
+	require.NoError(t, s.AtomicRmdir(ctx, RootIno, "doomed"))
+
+	_, err = s.AtomicCreateFile(ctx, dir, "late", 9801, ModeFile|0644, 1000, 1000, CreateExtra{})
+	require.ErrorIs(t, err, ErrNotFound)
+	_, err = s.AtomicCreateDir(ctx, dir, "late-dir", 9802, 0755, 1000, 1000)
+	require.ErrorIs(t, err, ErrNotFound)
+
+	for _, ino := range []uint64{9801, 9802} {
+		rec, gerr := s.GetInode(ctx, ino)
+		require.NoError(t, gerr)
+		assert.Nil(t, rec, "a create under a removed directory must write nothing")
+	}
 }

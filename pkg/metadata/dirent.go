@@ -148,6 +148,32 @@ type CreateExtra struct {
 	Ops  []clientv3.Op
 }
 
+// parentExists asserts that the directory a name is being added to still has
+// its inode. The caller resolved that directory before the transaction, and an
+// rmdir on another node can commit in between; a name published under it then
+// sits where no path from the root reaches it, and the orphan checks count it as
+// a reference. Existence rather than ModRevision is compared, so unrelated
+// creates in one directory still never abort each other. The root is exempt: a
+// filesystem may be seeded without an etcd record for it, and it is never
+// removed.
+func parentExists(parent uint64) []clientv3.Cmp {
+	if parent == RootIno {
+		return nil
+	}
+	return []clientv3.Cmp{clientv3.Compare(clientv3.CreateRevision(InodeKey(parent)), "!=", 0)}
+}
+
+// parentGone reports whether a refused transaction is explained by the parent
+// directory having been removed, which is the caller's answer (ENOENT) rather
+// than contention to retry.
+func (s *Store) parentGone(ctx context.Context, parent uint64) bool {
+	if parent == RootIno {
+		return false
+	}
+	rec, err := s.GetInode(ctx, parent)
+	return err == nil && rec == nil
+}
+
 // atomicCreate publishes a new inode and the name that refers to it in one
 // transaction, together with whatever else the file type needs (a symlink's
 // target, say).  Every creating operation goes through here: an inode written
@@ -164,7 +190,7 @@ func (s *Store) atomicCreate(ctx context.Context, parent uint64, name string, re
 		cmps := append([]clientv3.Cmp{
 			clientv3.Compare(clientv3.CreateRevision(DirentKey(parent, name)), "=", 0),
 			clientv3.Compare(clientv3.CreateRevision(InodeKey(rec.Ino)), "=", 0),
-		}, extra.Cmps...)
+		}, append(parentExists(parent), extra.Cmps...)...)
 		ops := append([]clientv3.Op{
 			PutDirent(parent, name, rec.Ino),
 			clientv3.OpPut(InodeKey(rec.Ino), string(EncodeInode(rec))),
@@ -199,6 +225,9 @@ func (s *Store) atomicCreate(ctx context.Context, parent uint64, name string, re
 		// parent having moved under us, which is contention worth retrying.
 		if existing, lerr := s.LookupDirent(ctx, parent, name); lerr == nil && existing != 0 {
 			return false, ErrExists
+		}
+		if s.parentGone(ctx, parent) {
+			return false, ErrNotFound
 		}
 		if rec.Mode&S_IFMT != ModeDir {
 			return false, ErrExists
@@ -342,10 +371,10 @@ func (s *Store) AtomicLink(ctx context.Context, ino, parent uint64, name string)
 		rec.Ctime = time.Now()
 
 		direntKey := DirentKey(parent, name)
-		cmps := []clientv3.Cmp{
+		cmps := append([]clientv3.Cmp{
 			clientv3.Compare(clientv3.CreateRevision(direntKey), "=", 0),
 			InodeUnchanged(ino, rev),
-		}
+		}, parentExists(parent)...)
 		ops := []clientv3.Op{
 			PutDirent(parent, name, ino),
 			clientv3.OpPut(InodeKey(ino), string(EncodeInode(rec))),
@@ -362,6 +391,9 @@ func (s *Store) AtomicLink(ctx context.Context, ino, parent uint64, name string)
 		// existing is the caller's answer.
 		if existing, lerr := s.LookupDirent(ctx, parent, name); lerr == nil && existing != 0 {
 			return false, fmt.Errorf("atomic link %d/%q: %w", parent, name, ErrExists)
+		}
+		if s.parentGone(ctx, parent) {
+			return false, fmt.Errorf("atomic link %d/%q: parent %w", parent, name, ErrNotFound)
 		}
 		return false, nil
 	})
@@ -593,9 +625,9 @@ func (s *Store) AtomicRename(ctx context.Context, oldParent uint64, oldName stri
 		}
 	}
 
-	cmps := []clientv3.Cmp{
+	cmps := append([]clientv3.Cmp{
 		clientv3.Compare(clientv3.CreateRevision(DirentKey(oldParent, oldName)), ">", 0),
-	}
+	}, parentExists(newParent)...)
 	ops := []clientv3.Op{
 		DeleteDirent(oldParent, oldName),
 		PutDirent(newParent, newName, ino),
@@ -613,7 +645,7 @@ func (s *Store) AtomicRename(ctx context.Context, oldParent uint64, oldName stri
 		if err := s.applyRenameNlink(ctx, oldParent, newParent, srcIsDir, false, &cmps, &ops); err != nil {
 			return fail("%w", err)
 		}
-		if err := s.commitRename(ctx, cmps, ops); err != nil {
+		if err := s.commitRename(ctx, newParent, cmps, ops); err != nil {
 			return fail("%w", err)
 		}
 		s.touchRenameDirs(ctx, oldParent, newParent)
@@ -666,7 +698,7 @@ func (s *Store) AtomicRename(ctx context.Context, oldParent uint64, oldName stri
 	if err := s.applyRenameNlink(ctx, oldParent, newParent, srcIsDir, victimIsDirectory, &cmps, &ops); err != nil {
 		return fail("%w", err)
 	}
-	if err := s.commitRename(ctx, cmps, ops); err != nil {
+	if err := s.commitRename(ctx, newParent, cmps, ops); err != nil {
 		return fail("%w", err)
 	}
 	s.touchRenameDirs(ctx, oldParent, newParent)
@@ -795,10 +827,13 @@ func (s *Store) ListOrphans(ctx context.Context, node string) ([]uint64, error) 
 	return inos, nil
 }
 
-func (s *Store) commitRename(ctx context.Context, cmps []clientv3.Cmp, ops []clientv3.Op) error {
+func (s *Store) commitRename(ctx context.Context, newParent uint64, cmps []clientv3.Cmp, ops []clientv3.Op) error {
 	ok, err := s.Txn(ctx, cmps, ops, nil)
 	if err != nil {
 		return err
+	}
+	if !ok && s.parentGone(ctx, newParent) {
+		return fmt.Errorf("destination directory was removed (%w)", ErrNotFound)
 	}
 	if !ok {
 		return fmt.Errorf("source or target changed under the rename (%w)", ErrConflict)
