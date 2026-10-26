@@ -38,6 +38,13 @@ func Client(t *testing.T) *clientv3.Client {
 	if endpoints == "" {
 		endpoints = "http://localhost:2379"
 	}
+	return ClientAt(t, endpoints)
+}
+
+// ClientAt is Client dialed at the given comma-separated endpoints, for a test
+// that needs one particular member of the cluster rather than any of them.
+func ClientAt(t *testing.T, endpoints string) *clientv3.Client {
+	t.Helper()
 
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:   strings.Split(endpoints, ","),

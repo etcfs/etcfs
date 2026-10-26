@@ -317,11 +317,23 @@ func (s *Store) GetExtents(ctx context.Context, ino uint64, opts ...clientv3.OpO
 // Serializable because the shared lock, not the read's placement in etcd's
 // linear order, is what keeps a concurrent writer off the range — and a read
 // that could not take the lock is already best effort.
+//
+// The lock orders the commits, though, not what the answering member has
+// applied: a follower outside the quorum, or one that has not yet applied the
+// acquisition, still answers, with an extent list from before the previous
+// holder's writes. So a snapshot older than any revision this store has seen
+// committed — the lock acquisition included — is read again linearizably.
 func (s *Store) GetInodeAndExtents(ctx context.Context, ino uint64) (*InodeRecord, []Extent, error) {
 	resp, err := s.readTxn(ctx,
 		clientv3.OpGet(InodeKey(ino), clientv3.WithSerializable()),
 		clientv3.OpGet(ExtentPrefix(ino), clientv3.WithPrefix(), clientv3.WithSerializable()),
 	)
+	if err == nil && resp.Header.Revision < s.seenRev.Load() {
+		resp, err = s.client.Txn(ctx).Then(
+			clientv3.OpGet(InodeKey(ino)),
+			clientv3.OpGet(ExtentPrefix(ino), clientv3.WithPrefix()),
+		).Commit()
+	}
 	if err != nil {
 		return nil, nil, fmt.Errorf("get inode and extents ino %d: %w", ino, err)
 	}

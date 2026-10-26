@@ -38,6 +38,12 @@ type Store struct {
 	// See SetLocalClient.
 	localClient *clientv3.Client
 
+	// seenRev is the highest etcd revision this store has seen committed —
+	// its own transactions, lock acquisitions among them, and its reads. A
+	// serializable read answered below it comes from a member that has not
+	// applied something this node already depends on. See GetInodeAndExtents.
+	seenRev atomic.Int64
+
 	// session is the lease every lock this node holds is written under, granted
 	// once and kept alive for the store's lifetime instead of per acquisition.
 	// lockSeq makes holder tokens unique within it.  See AcquireLock.
@@ -121,10 +127,25 @@ func (s *Store) SetLocalClient(c *clientv3.Client) {
 func (s *Store) read(ctx context.Context, key string, opts ...clientv3.OpOption) (*clientv3.GetResponse, error) {
 	if s.localClient != nil {
 		if resp, err := s.localClient.Get(ctx, key, opts...); err == nil {
+			s.observe(resp.Header.Revision)
 			return resp, nil
 		}
 	}
-	return s.client.Get(ctx, key, opts...)
+	resp, err := s.client.Get(ctx, key, opts...)
+	if err == nil {
+		s.observe(resp.Header.Revision)
+	}
+	return resp, err
+}
+
+// observe raises seenRev to rev.
+func (s *Store) observe(rev int64) {
+	for {
+		cur := s.seenRev.Load()
+		if rev <= cur || s.seenRev.CompareAndSwap(cur, rev) {
+			return
+		}
+	}
 }
 
 // readTxn issues read-only operations as one unconditional transaction.
@@ -204,6 +225,7 @@ func (s *Store) TxnResponse(ctx context.Context, ifs []clientv3.Cmp, thens, else
 	if err != nil {
 		return nil, err
 	}
+	s.observe(resp.Header.Revision)
 	if !resp.Succeeded && s.guard != nil {
 		if fenced, ferr := s.guardFailed(ctx); ferr == nil && fenced {
 			return nil, fmt.Errorf("txn: %w", ErrFenced)
