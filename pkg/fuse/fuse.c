@@ -421,11 +421,12 @@ static const char *ipc_socket(void)
     return env ? env : "/tmp/etcfuse.sock";
 }
 
+/* The stored value is fd + 1, as in etcfs_ipc_fd. */
 static void ipc_fd_destroy(void *value)
 {
-    int fd = (int) (intptr_t) value;
-    if (fd >= 0)
-        close(fd);
+    intptr_t stored = (intptr_t) value;
+    if (stored > 0)
+        close((int) (stored - 1));
 }
 
 static void ipc_fd_key_create(void)

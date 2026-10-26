@@ -13,6 +13,7 @@
 #include "../../pkg/fuse/ops.c"
 
 #include <assert.h>
+#include <fcntl.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <signal.h>
@@ -162,6 +163,10 @@ static void test_name_bounds_match_the_protocol(void)
 
 /* ---- per-thread IPC connections ---- */
 
+/* Both workers stay alive until each has connected: an exited worker's fd is
+ * closed and its number free for the next one to reuse. */
+static pthread_barrier_t both_connected;
+
 static void *ipc_fd_of_this_thread(void *out)
 {
     int fd = etcfs_ipc_fd();
@@ -169,6 +174,7 @@ static void *ipc_fd_of_this_thread(void *out)
      * rather than opening one per request. */
     assert(etcfs_ipc_fd() == fd);
     *(int *) out = fd;
+    pthread_barrier_wait(&both_connected);
     return NULL;
 }
 
@@ -192,10 +198,12 @@ static void test_each_thread_gets_its_own_ipc_connection(void)
 
     int first = -1, second = -1;
     pthread_t a, b;
+    assert(pthread_barrier_init(&both_connected, NULL, 2) == 0);
     assert(pthread_create(&a, NULL, ipc_fd_of_this_thread, &first) == 0);
-    assert(pthread_join(a, NULL) == 0);
     assert(pthread_create(&b, NULL, ipc_fd_of_this_thread, &second) == 0);
+    assert(pthread_join(a, NULL) == 0);
     assert(pthread_join(b, NULL) == 0);
+    pthread_barrier_destroy(&both_connected);
 
     assert(first >= 0);
     assert(second >= 0);
@@ -246,6 +254,60 @@ static void test_a_failed_exchange_reconnects_on_the_next_request(void)
 
     etcfs_ipc_drop();
     close(reconnected);
+    close(listener);
+    unlink(path);
+    unsetenv("ETCFS_IPC_SOCKET");
+}
+
+/* A retiring FUSE worker must close its own socket and nothing else: libfuse
+ * retires idle workers under bursty load, and closing a neighbouring fd there
+ * takes down another worker's connection or a cloned /dev/fuse descriptor. */
+struct exit_fds {
+    int own;
+    int neighbour;
+};
+
+static void *connect_then_exit(void *out)
+{
+    struct exit_fds *fds = out;
+    fds->own = etcfs_ipc_fd();
+    assert(fds->own >= 0);
+    fds->neighbour = fds->own + 1;
+    int pipefd[2];
+    assert(pipe(pipefd) == 0);
+    assert(dup2(pipefd[0], fds->neighbour) == fds->neighbour);
+    if (pipefd[0] != fds->neighbour)
+        close(pipefd[0]);
+    if (pipefd[1] != fds->neighbour)
+        close(pipefd[1]);
+    return NULL;
+}
+
+static void test_a_retiring_thread_closes_only_its_own_connection(void)
+{
+    char path[64];
+    snprintf(path, sizeof(path), "/tmp/etcfs-test-retire-%d.sock", (int) getpid());
+    unlink(path);
+
+    int listener = socket(AF_UNIX, SOCK_STREAM, 0);
+    assert(listener >= 0);
+    struct sockaddr_un addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", path);
+    assert(bind(listener, (struct sockaddr *) &addr, sizeof(addr)) == 0);
+    assert(listen(listener, 8) == 0);
+    setenv("ETCFS_IPC_SOCKET", path, 1);
+
+    struct exit_fds fds = {-1, -1};
+    pthread_t t;
+    assert(pthread_create(&t, NULL, connect_then_exit, &fds) == 0);
+    assert(pthread_join(t, NULL) == 0);
+
+    assert(fcntl(fds.neighbour, F_GETFD) != -1);
+    assert(fcntl(fds.own, F_GETFD) == -1);
+
+    close(fds.neighbour);
     close(listener);
     unlink(path);
     unsetenv("ETCFS_IPC_SOCKET");
@@ -411,6 +473,7 @@ int main(void)
     test_name_bounds_match_the_protocol();
     test_each_thread_gets_its_own_ipc_connection();
     test_a_failed_exchange_reconnects_on_the_next_request();
+    test_a_retiring_thread_closes_only_its_own_connection();
     test_fixed_reply_widths_match_the_daemon();
     test_a_negative_entry_parses_as_a_cacheable_absence();
     test_the_queue_is_first_in_first_out();
