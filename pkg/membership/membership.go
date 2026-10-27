@@ -3,7 +3,6 @@ package membership
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"time"
 
 	mvccpb "go.etcd.io/etcd/api/v3/mvccpb"
@@ -120,77 +119,6 @@ func (m *Manager) releaseArena(ctx context.Context, ownerKey string, arenaID uin
 
 func (m *Manager) LeaveUngraceful(ctx context.Context) {
 	_ = m.LeaveGraceful(ctx)
-}
-
-// RebalanceArena reassigns arenaID from fromNode to toNode.
-//
-// Restricted to reclaiming a FENCED node's arena — fromNode must already have
-// a bumped fencing generation (gen:<fromNode> > 0). This is not an arbitrary
-// restriction: it is the one precondition under which reassignment is
-// actually safe. Moving an arena away from a live, healthy node is
-// unclosable by any guard — both the old and new owner would be unfenced, so
-// no CAS check has anything to reject, and the two could both write into the
-// same range. A fencing-generation check turns that into a closed case: once
-// fromNode is fenced, the generation guard on its own metadata transactions
-// (see pkg/metadata's store-wide guard, if this Store is a guarded
-// *metadata.Store) already prevents it from writing anywhere, arenaID
-// included, so reassigning its arena to a live node cannot collide with it.
-//
-// This does NOT provide full proof of quiescence — reissuing an arena still
-// requires no proof of quiescence beyond the generation bump, which is a
-// real signal (the fenced node cannot commit further writes) but not a
-// guarantee its kernel has stopped issuing them at the block-device level.
-// That gap is unchanged by this guard: arena reclamation still has no
-// device-confirmed quiescence check.
-func (m *Manager) RebalanceArena(ctx context.Context, fromNode, toNode string, arenaID uint64) error {
-	fromKey := metadata.ArenaOwnerKey(fromNode, arenaID)
-	fromVal, err := m.Store.Get(ctx, fromKey)
-	if err != nil {
-		return fmt.Errorf("rebalance arena %d: read %s: %w", arenaID, fromNode, err)
-	}
-	if fromVal == nil {
-		return fmt.Errorf("rebalance arena %d: source node %s does not hold it", arenaID, fromNode)
-	}
-
-	genVal, err := m.Store.Get(ctx, metadata.GenKey(fromNode))
-	if err != nil {
-		return fmt.Errorf("rebalance arena %d: read generation of %s: %w", arenaID, fromNode, err)
-	}
-	var gen uint64
-	if genVal != nil {
-		gen, err = strconv.ParseUint(string(genVal), 10, 64)
-		if err != nil {
-			return fmt.Errorf("rebalance arena %d: malformed generation for %s: %w", arenaID, fromNode, err)
-		}
-	}
-	if gen == 0 {
-		return fmt.Errorf("rebalance arena %d: source node %s has not been fenced — "+
-			"rebalancing a live node's arena would give its range to a second writer",
-			arenaID, fromNode)
-	}
-
-	// Single atomic transaction rather than a separate Delete then Put: the
-	// unguarded two-step version left a window, on a crash between the two
-	// calls, where the arena belonged to neither node — worse than either
-	// keeping it or losing it cleanly. The CAS re-verifies fromKey still
-	// holds arenaID at commit time, guarding against a concurrent rebalance
-	// or reacquisition racing this one between the read above and the write.
-	cmps := []clientv3.Cmp{
-		clientv3.Compare(clientv3.Value(fromKey), "=", string(metadata.EncodeUint64(arenaID))),
-	}
-	toKey := metadata.ArenaOwnerKey(toNode, arenaID)
-	ops := []clientv3.Op{
-		clientv3.OpDelete(fromKey),
-		clientv3.OpPut(toKey, string(metadata.EncodeUint64(arenaID))),
-	}
-	ok, err := m.Store.Txn(ctx, cmps, ops, nil)
-	if err != nil {
-		return fmt.Errorf("rebalance arena %d: %s -> %s: %w", arenaID, fromNode, toNode, err)
-	}
-	if !ok {
-		return fmt.Errorf("rebalance arena %d: %s -> %s: concurrent modification, retry", arenaID, fromNode, toNode)
-	}
-	return nil
 }
 
 func (m *Manager) IsMember(ctx context.Context, nodeID string) bool {

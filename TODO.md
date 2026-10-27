@@ -202,8 +202,13 @@ and no indication of it. Until the handlers exist, a loud log line on first
 `SETLK`, or a mount option returning `ENOTSUP` instead of success, would stop
 that failing silently.
 
-**A production caller for arena rebalancing. Small; contained.** The mechanism
-exists and nothing invokes it, so an imbalanced cluster has no remedy.
+**Owner-initiated arena donation. Medium; allocator plus a file relocation.**
+Free space inside a live node's partly used arenas cannot move to another node,
+so a node can get `ENOSPC` on a half-empty device. The safe remedy is for the
+owner to empty a mostly free arena by relocating its few live files into its
+other arenas (copy, then switch the extents in one transaction under the file's
+lock) and release it through `ReleaseEmptyArenas`. Taking an arena from a live
+node is never safe: both nodes are unfenced, so no guard rejects either writer.
 
 **Shard the inode counter. Small to medium; `inodealloc.go` and one key.**
 Contention grows with node count by design; named as the structure most likely
