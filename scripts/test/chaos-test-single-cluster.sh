@@ -399,7 +399,7 @@ run_s11() {
     # Two failure shapes are both correct here, and which one comes back depends
     # only on how far into the outage the attempt lands: EIO while the node is
     # merely unable to publish, and ECONNABORTED once its self-fence watchdog
-    # (2-3x the lease TTL) has torn the FUSE session down. Demanding EIO every
+    # (2x the lease TTL plus up to a third of it) has torn the FUSE session down. Demanding EIO every
     # time made the watchdog doing its job look like a failure. What must never
     # happen is a *successful* fsync while the flush cannot commit.
     local FAILED_COUNT=0 EIO_COUNT=0 k out

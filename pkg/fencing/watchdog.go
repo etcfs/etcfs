@@ -14,8 +14,8 @@
 // effort; what is not best effort is process exit, which lets the kernel
 // release the block device and the FUSE mount, and open handles get EIO.
 //
-// Because the check runs on a ticker of one TTL, the fence lands 2-3× TTL
-// after the last successful keepalive depending on tick phase, not a flat 2×.
+// The check runs on a ticker of a third of the TTL, so the fence lands between
+// 2× and 2⅓× TTL after the last successful keepalive depending on tick phase.
 //
 // This narrows, but does not close, the most dangerous window — a node
 // partitioned from etcd but still connected to the shared block device.
@@ -36,7 +36,7 @@ import (
 // Watchdog monitors etcd lease health and triggers self-fencing
 // when the lease is lost and cannot be re-established.
 type Watchdog struct {
-	membership *metadata.Membership
+	membership leaseState
 	leaseTTL   time.Duration
 	log        *config.Logger
 	fenced     chan struct{} // closed when self-fence triggers
@@ -44,6 +44,19 @@ type Watchdog struct {
 	mu       sync.Mutex
 	isFenced bool
 }
+
+// leaseState is the part of metadata.Membership the watchdog reads, narrowed so
+// tests can drive lease loss without etcd.
+type leaseState interface {
+	IsAlive() bool
+	LastAlive() time.Time
+	NodeID() string
+}
+
+// pollDivisor sets the poll interval to TTL/pollDivisor.  Polling once per TTL
+// let a fence land up to a whole TTL past the 2× window; a third bounds the
+// overshoot at TTL/3 for a negligible cost, since each poll is a mutex read.
+const pollDivisor = 3
 
 // NewWatchdog creates a self-fencing watchdog.
 func NewWatchdog(membership *metadata.Membership, leaseTTL time.Duration) *Watchdog {
@@ -55,14 +68,13 @@ func NewWatchdog(membership *metadata.Membership, leaseTTL time.Duration) *Watch
 	}
 }
 
-// Run starts the watchdog.  It polls the membership once per lease TTL and
-// triggers self-fence if the lease has been dead longer than
+// Run starts the watchdog.  It polls the membership every third of the lease
+// TTL and triggers self-fence if the lease has been dead longer than
 // config.SelfFenceWindow, which is 2× the TTL.
 //
 // Blocks until ctx is cancelled or self-fence triggers.
 func (w *Watchdog) Run(ctx context.Context) {
-	// Poll at every lease TTL interval
-	ticker := time.NewTicker(w.leaseTTL)
+	ticker := time.NewTicker(w.leaseTTL / pollDivisor)
 	defer ticker.Stop()
 
 	for {

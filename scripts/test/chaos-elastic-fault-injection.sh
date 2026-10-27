@@ -388,12 +388,12 @@ run_fj2() {
     # test of whether self-fencing fired, and asserting on it reported a
     # working fence as a failure.
     #
-    # Poll rather than sleep a fixed interval: the watchdog ticks once per
-    # lease TTL and fires on the first tick where the lease has been dead
-    # longer than 2x TTL, so the fence lands 2-3x TTL after the last
+    # Poll rather than sleep a fixed interval: the watchdog ticks every third
+    # of the lease TTL and fires on the first tick where the lease has been
+    # dead longer than 2x TTL, so the fence lands 2-2.33x TTL after the last
     # keepalive depending on tick phase, plus up to TTL/3 because that last
-    # keepalive precedes the partition. With TTL=10s that is ~20-33s, which a
-    # fixed 25s wait races.
+    # keepalive precedes the partition. With TTL=10s that is ~20-27s, which a
+    # fixed wait would race.
     local fence_deadline=45 fence_waited=0 fenced=0
     log "  waiting up to ${fence_deadline}s for the meta daemon to self-fence..."
     while [[ "$fence_waited" -lt "$fence_deadline" ]]; do
