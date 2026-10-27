@@ -25,6 +25,25 @@ no code. Maintained, Contributors and Code-Review cannot move without repo age
 or a second reviewer, which caps a solo project near 8/10; there is no value in
 chasing those.
 
+**3. Free blocks held after an ambiguous extent commit without a restart.**
+When a commit's outcome is unknown and a re-read does not show it landed, the
+write returns EIO and keeps its blocks allocated until the daemon restarts and
+rebuilds the bitmap. A background pass that re-reads later and frees the blocks
+once the extent is confirmed absent would return the space online. Small to
+medium; `commitWriteOp` and the allocator.
+
+**4. Run the lagging-member stale-read test in CI.**
+`TestIntegration_LockedReadIsNotStaleOnALaggingMember` skips unless
+`ETCD_LAGGING_ENDPOINT` points at a member cut off from its peers, so the normal
+integration run never exercises it. A job with a three-member compose cluster
+and one member isolated would. Small.
+
+**5. Bound the startup rebuild's read.** `Reconstruct` reads every extent in the
+cluster in one unpaginated range read and filters by arena in memory, so each
+node's startup costs O(cluster extents) in time and memory. Paginate first; a
+per-arena index key would make it O(own data) at one extra key per extent
+commit. Small (pagination) to medium (index).
+
 ## Deferred
 
 Measured, understood, and parked — not because they do not matter, but because
@@ -189,6 +208,15 @@ the same pinning machinery snapshots do. That pinning is the work.
 
 **Snapshots. Large; same pinning, plus a namespace clone.** Shares all of its
 hard part with backup, so the two are one project rather than two.
+
+**Reattach the volume automatically after an EBS fence. Small to medium;
+bootstrap plus a fence-completion check.** A node fenced by detach restarts
+without its volume until someone reattaches it. Reattaching is safe only once
+the old incarnation's fence is complete — generation raised and the controller
+done with its arenas — and with the old process gone; the new process must read
+its generation after the reattach. Reattaching earlier lets the new process
+rebuild and allocate in arenas the controller is about to release as
+device-fenced, putting two writers in one range.
 
 **Several shared volumes. Medium to large; extent addressing plus fencing.**
 Capacity and IOPS are bounded by one io2 volume. Attaching several, each to
