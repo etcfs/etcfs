@@ -12,6 +12,23 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
+# git runs hooks from whatever shell pushed, which need not have mise activated,
+# and then the pinned go and golangci-lint are simply not on PATH.  Re-exec once
+# under the repo's mise environment; the variable stops a second re-exec.
+if [[ -z "${ETCFS_PRE_PUSH_UNDER_MISE:-}" ]] && command -v mise >/dev/null 2>&1; then
+    export ETCFS_PRE_PUSH_UNDER_MISE=1
+    exec mise exec -- "$ROOT/scripts/dev/pre-push.sh" "$@"
+fi
+
+# Without mise, PATH is all there is.  A missing tool fails here by name rather
+# than as a wall of FAIL lines further down.
+for tool in go golangci-lint make clang-format shellcheck; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "pre-push: $tool not found on PATH; install it or run under mise (mise exec -- git push)" >&2
+        exit 1
+    fi
+done
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m'
