@@ -190,6 +190,20 @@ the same pinning machinery snapshots do. That pinning is the work.
 **Snapshots. Large; same pinning, plus a namespace clone.** Shares all of its
 hard part with backup, so the two are one project rather than two.
 
+**Several shared volumes. Medium to large; extent addressing plus fencing.**
+Capacity and IOPS are bounded by one io2 volume. Attaching several, each to
+every node, keeps the shared-device property: an extent becomes (volume,
+offset), arenas are numbered per volume, and allocation, ownership and the
+bitmap rebuild work per volume unchanged. The hard part is fencing: an arena may
+be released only after the device cut its old owner off, so a fence must cover
+every volume, and a fence that succeeds on some volumes and fails on others may
+release only the fenced volumes' arenas. The fencing controller and the TLA+
+model both assume one device. Multi-Attach still caps each volume at 16
+instances in one availability zone, so this grows capacity, not cluster size.
+One private disk per node is not the same extension: other nodes could no
+longer read a file's bytes directly, and a dead node would make its files
+unreadable rather than only unwritable.
+
 **Cross-node `fcntl`/`flock`. Medium; a key namespace and two handlers.** Today
 `SETLK` always succeeds and `GETLK` always reports the range free, so an
 application coordinating through file locks silently gets nothing. `SETLKW`
