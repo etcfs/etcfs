@@ -276,3 +276,62 @@ func TestIntegration_RecycledArenaKeepsLiveExtentsMarked(t *testing.T) {
 		}
 	}
 }
+
+// Claiming a freed arena moves it from the pool to its new owner in one
+// transaction, so there is no moment — and no crash point — at which it is
+// neither free nor owned.  Concurrent claimers must end with exactly one owner
+// and no free key left behind.
+func TestIntegration_ClaimMovesArenaAtomically(t *testing.T) {
+	ctx := context.Background()
+	store := testStore(t, "node-A")
+
+	if _, err := store.Put(ctx, metadata.ArenaOwnerKey("node-A", 5), metadata.EncodeUint64(5)); err != nil {
+		t.Fatalf("seed owner: %v", err)
+	}
+	if won, err := store.ReleaseArenaID(ctx, "node-A", 5); err != nil || !won {
+		t.Fatalf("release: won=%v err=%v", won, err)
+	}
+
+	nodes := []string{"node-B", "node-C", "node-D", "node-E"}
+	type result struct {
+		ok  bool
+		err error
+	}
+	results := make(chan result, len(nodes))
+	for _, n := range nodes {
+		go func(n string) {
+			_, ok, err := metadata.NewStore(store.Client(), n).ClaimFreeArena(ctx, n)
+			results <- result{ok, err}
+		}(n)
+	}
+	winners := 0
+	for range nodes {
+		r := <-results
+		if r.err != nil {
+			t.Fatalf("claim: %v", r.err)
+		}
+		if r.ok {
+			winners++
+		}
+	}
+	if winners != 1 {
+		t.Fatalf("%d claimers won arena 5, want exactly 1", winners)
+	}
+
+	if free, err := store.Get(ctx, metadata.FreeArenaKey(5)); err != nil || free != nil {
+		t.Fatalf("free key after claim: %q err=%v, want gone", free, err)
+	}
+	owners := 0
+	for _, n := range nodes {
+		v, err := store.Get(ctx, metadata.ArenaOwnerKey(n, 5))
+		if err != nil {
+			t.Fatalf("read owner: %v", err)
+		}
+		if v != nil {
+			owners++
+		}
+	}
+	if owners != 1 {
+		t.Fatalf("arena 5 has %d owner records after the claim, want exactly 1", owners)
+	}
+}

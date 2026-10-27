@@ -101,15 +101,21 @@ func (s *Store) CountOwnedArenas(ctx context.Context) (int64, error) {
 	return resp.Count, nil
 }
 
-// ClaimFreeArena takes one arena out of the global free pool, reporting the
-// arena claimed and whether the pool had one.
+// ClaimFreeArena takes one arena out of the global free pool and records
+// nodeID as its owner, reporting the arena claimed and whether the pool had one.
 //
-// The delete is the claim: it is conditioned on the key still existing, so of
-// several nodes reaching for the same freed arena exactly one wins and the
-// losers move on to the next candidate.  Handing the same arena to two nodes
-// would put both of them writing into one range with nothing to detect it,
-// which is why this cannot be a plain read-then-delete.
-func (s *Store) ClaimFreeArena(ctx context.Context) (uint64, bool, error) {
+// The move is one transaction — free key exists and owner key absent, then
+// delete the one and write the other — so a crash cannot leave the arena
+// neither free nor owned, which would leak it for good.  The free key's
+// existence is also what makes the claim exclusive: of several nodes reaching
+// for the same freed arena exactly one wins and the losers move on to the next
+// candidate.  Handing the same arena to two nodes would put both of them
+// writing into one range with nothing to detect it.
+//
+// Guarded by the generation like any other mutation: a fenced node must not
+// pull arenas out of the pool it can no longer be trusted to write into.  A
+// guard rejection comes back as ErrFenced.
+func (s *Store) ClaimFreeArena(ctx context.Context, nodeID string) (uint64, bool, error) {
 	kvs, err := s.GetPrefix(ctx, PrefixFreeArena)
 	if err != nil {
 		return 0, false, fmt.Errorf("claim free arena: %w", err)
@@ -120,9 +126,16 @@ func (s *Store) ClaimFreeArena(ctx context.Context) (uint64, bool, error) {
 		if perr != nil {
 			continue
 		}
-		won, _, err := s.txnRaw(ctx,
-			[]clientv3.Cmp{clientv3.Compare(clientv3.CreateRevision(key), "!=", 0)},
-			[]clientv3.Op{clientv3.OpDelete(key)}, nil)
+		owner := ArenaOwnerKey(nodeID, arenaID)
+		won, err := s.Txn(ctx,
+			[]clientv3.Cmp{
+				clientv3.Compare(clientv3.CreateRevision(key), "!=", 0),
+				clientv3.Compare(clientv3.CreateRevision(owner), "=", 0),
+			},
+			[]clientv3.Op{
+				clientv3.OpDelete(key),
+				clientv3.OpPut(owner, string(EncodeUint64(arenaID))),
+			}, nil)
 		if err != nil {
 			return 0, false, fmt.Errorf("claim free arena %d: %w", arenaID, err)
 		}

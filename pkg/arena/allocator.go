@@ -11,6 +11,7 @@ package arena
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/bits"
 	"sync"
@@ -125,15 +126,18 @@ func (a *Allocator) AcquireArena(ctx context.Context) (*Arena, error) {
 
 	// Record ownership before using the arena.  Without this the node has no
 	// durable claim on the range it is about to write into, and a restart
-	// cannot tell which arenas were its own.
+	// cannot tell which arenas were its own.  A recycled arena already has its
+	// record: ClaimFreeArena wrote it in the same transaction as the claim.
 	//
 	// Conditioned on the key not already existing: a record that is already
-	// there means the arena ID came back from the counter or the free pool
-	// while someone still holds it, and writing into it anyway is the silent
-	// two-writers-one-range corruption the arena scheme exists to prevent.
-	// Failing the write that triggered this is the safe outcome.
-	if err := a.recordOwnership(ctx, arenaID); err != nil {
-		return nil, err
+	// there means the arena ID came back from the counter while someone still
+	// holds it, and writing into it anyway is the silent two-writers-one-range
+	// corruption the arena scheme exists to prevent.  Failing the write that
+	// triggered this is the safe outcome.
+	if !reused {
+		if err := a.recordOwnership(ctx, arenaID); err != nil {
+			return nil, err
+		}
 	}
 
 	free := &Arena{
@@ -189,9 +193,14 @@ func (a *Allocator) recordOwnership(ctx context.Context, arenaID uint64) error {
 // never handed out again and the free_arena: keys accumulate as a record of
 // space nobody uses.  A failed claim is not fatal — falling through to a new
 // arena costs device space but always works, whereas failing the write that
-// triggered this would surface an etcd hiccup as an I/O error.
+// triggered this would surface an etcd hiccup as an I/O error.  A fence is the
+// exception: it is permanent, and a new arena would be refused the same way.
 func (a *Allocator) allocateArenaID(ctx context.Context) (id uint64, reused bool, err error) {
-	if id, ok, cerr := a.store.ClaimFreeArena(ctx); cerr == nil && ok {
+	id, ok, cerr := a.store.ClaimFreeArena(ctx, a.nodeID)
+	switch {
+	case errors.Is(cerr, metadata.ErrFenced):
+		return 0, false, cerr
+	case cerr == nil && ok:
 		return id, true, nil
 	}
 	id, err = a.store.NextCounter(ctx, metadata.PrefixArenaLog, 0)

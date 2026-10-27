@@ -96,7 +96,8 @@ func NewStore(client *clientv3.Client, nodeID string) *Store {
 //   - the fencing control plane — RecordFenceIntent, ClaimFence and
 //     MarkFenceComplete, which a survivor writes *about* a fenced node;
 //   - what a fenced node must still be able to give back — MarkDeparted,
-//     ReleaseArenaID and ClaimFreeArena;
+//     ReleaseArenaID.  Claiming an arena (ClaimFreeArena) is guarded, because
+//     taking space is not giving it back;
 //   - AnnounceLockWant, which mutates no filesystem state; the acquisition it
 //     leads to is guarded in the ordinary way.
 //

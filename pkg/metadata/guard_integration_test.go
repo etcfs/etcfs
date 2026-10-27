@@ -206,3 +206,28 @@ func TestGuard_UnavailableGuardFailsClosed(t *testing.T) {
 	_, err = store.Put(ctx, InodeKey(600), []byte("nope"))
 	assert.ErrorIs(t, err, ErrGuardUnavailable)
 }
+
+// A fenced node must not pull arenas out of the free pool: the claim is
+// rejected and the arena stays free for a node that may still write.
+func TestGuard_ClaimFreeArenaRejectedWhenFenced(t *testing.T) {
+	store, ctx := guardedStore(t, "claim-node")
+
+	_, err := store.Put(ctx, ArenaOwnerKey("other-node", 9), EncodeUint64(9))
+	require.NoError(t, err)
+	won, err := store.ReleaseArenaID(ctx, "other-node", 9)
+	require.NoError(t, err)
+	require.True(t, won)
+
+	fence(t, store, "claim-node")
+
+	_, ok, err := store.ClaimFreeArena(ctx, "claim-node")
+	assert.ErrorIs(t, err, ErrFenced)
+	assert.False(t, ok)
+
+	free, err := store.Get(ctx, FreeArenaKey(9))
+	require.NoError(t, err)
+	assert.NotNil(t, free, "a rejected claim must leave the arena in the pool")
+	owner, err := store.Get(ctx, ArenaOwnerKey("claim-node", 9))
+	require.NoError(t, err)
+	assert.Nil(t, owner, "a rejected claim must not record ownership")
+}
