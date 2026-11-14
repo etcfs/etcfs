@@ -1,9 +1,18 @@
-# EtcFS
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/headline-dark.png">
+    <img src="assets/headline-light.png" alt="EtcFS" width="50%">
+  </picture>
+</p>
 
-[![CI](https://github.com/etcfs/etcfs/actions/workflows/ci.yml/badge.svg)](https://github.com/etcfs/etcfs/actions/workflows/ci.yml)
-[![CodeFactor](https://www.codefactor.io/repository/github/etcfs/etcfs/badge)](https://www.codefactor.io/repository/github/etcfs/etcfs)
-[![codecov](https://codecov.io/gh/etcfs/etcfs/branch/main/graph/badge.svg)](https://codecov.io/gh/etcfs/etcfs)
-[![Docs](https://img.shields.io/badge/docs-mkdocs-blue)](https://etcfs.github.io/etcfs-docs/)
+<h1 align="center">EtcFS</h1>
+
+<p align="center">
+  <a href="https://github.com/etcfs/etcfs/actions/workflows/ci.yml"><img src="https://github.com/etcfs/etcfs/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.codefactor.io/repository/github/etcfs/etcfs"><img src="https://www.codefactor.io/repository/github/etcfs/etcfs/badge" alt="CodeFactor"></a>
+  <a href="https://codecov.io/gh/etcfs/etcfs"><img src="https://codecov.io/gh/etcfs/etcfs/branch/main/graph/badge.svg" alt="codecov"></a>
+  <a href="https://etcfs.github.io/etcfs-docs/"><img src="https://img.shields.io/badge/docs-mkdocs-blue" alt="Docs"></a>
+</p>
 
 **A cluster filesystem for shared raw block devices, with all metadata in etcd.**
 
@@ -99,7 +108,7 @@ table shows how long a survivor takes to write a file the dead node held the
 lock on.
 
 | Backend | takes over the dead node's file | survivor's own I/O |
-|---|---|---|
+| --- | --- | --- |
 | **EtcFS** | **3.0–3.5 s** (8 runs) | kept writing (≤1.5 s worst gap) |
 | gluster | 22.3–22.7 s (3 runs) | kept writing, 77–78 s worst gap |
 | gfs2 | never, inside 180 s | **stopped for the rest of the run** |
@@ -116,7 +125,7 @@ from GFS2 or from the harness's DLM–Pacemaker integration is not established
 trip:
 
 | Case | EtcFS | Best competitor | Ratio |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | 80k-file untar | 1452.5 s | 18.9 s (gfs2) | **77x slower** |
 | Shared-directory metadata, 3 nodes | 405 ops/s | 2063 ops/s (gfs2) | **5.1x slower** |
 | 4 KiB random write p99, matched load | 12.4 ms | 8.0 ms (gfs2) | **1.5x higher** |
@@ -149,7 +158,7 @@ The [documentation site](https://etcfs.github.io/etcfs-docs/) covers everything
 beyond this quick start:
 
 | | |
-|---|---|
+| --- | --- |
 | **[Deployment](https://github.com/etcfs/etcfs-docs/blob/main/docs/deployment/index.md)** | Terraform module, binaries/containers, configuration, `etcfsctl`, Prometheus + Grafana |
 | **[Architecture](https://github.com/etcfs/etcfs-docs/blob/main/docs/architecture/fuse/fuse-architecture.md)** | FUSE layer, metadata model, storage substrate, consistency, fencing, reliability, cluster ops — one doc per subsystem |
 | **[Reports](https://github.com/etcfs/etcfs-docs/blob/main/docs/reports/chaos-reports/fresh-cluster-per-scenario.md)** | Chaos-testing and benchmark results, by date |
