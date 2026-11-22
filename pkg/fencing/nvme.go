@@ -22,10 +22,12 @@ type reservationDevice interface {
 // This is the strongest of the fencing mechanisms and the only one that is
 // enforced by the resource itself.  Where EBSDetacher *requests* a detach and
 // then polls for evidence that it happened, a preempt is synchronous: when it
-// returns, the preempted host's writes already fail at write(2) with EBADE,
-// zero bytes reaching the device.  There is no residual-I/O window to reason
-// about, which is what makes reclaiming a fenced node's arenas safe
-// immediately rather than after a grace period nobody can size correctly.
+// returns, the preempted host's new writes fail at write(2) with EBADE, and
+// the writes it had already submitted have completed — the preempt is sent as
+// Preempt and Abort, whose completion the device holds until they have.
+// There is no residual-I/O window to reason about, which is what makes
+// reclaiming a fenced node's arenas safe immediately rather than after a
+// grace period nobody can size correctly.
 //
 // The reservation type is Write Exclusive – All Registrants, the only type
 // that allows every node to write concurrently while still permitting one to

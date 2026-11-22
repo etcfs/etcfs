@@ -56,12 +56,15 @@ func TestAcquireUsesWriteExclusiveAllRegistrants(t *testing.T) {
 }
 
 // The fencing primitive: the victim's key goes in the second slot, this
-// node's own key in the first.  Swapping them would preempt nobody.
+// node's own key in the first.  Swapping them would preempt nobody.  The
+// action must be Preempt and Abort: plain Preempt leaves the victim's
+// in-flight writes running after the fence has returned.
 func TestPreemptEncodesVictimKey(t *testing.T) {
 	f := &fakeNVMe{}
 	require.NoError(t, testDevice(f).Preempt(0x1111, 0x2222))
 
-	assert.Equal(t, uint32(acquireActionPreempt), f.cmds[0].cdw10&0x7)
+	assert.Equal(t, uint32(acquireActionPreemptAbort), f.cmds[0].cdw10&0x7, "preempt and abort")
+	assert.Equal(t, uint32(TypeWriteExclusiveAllRegistrants), (f.cmds[0].cdw10>>8)&0xFF, "reservation type")
 	assert.Equal(t, uint64(0x1111), binary.LittleEndian.Uint64(f.data[0][0:8]), "current key is our own")
 	assert.Equal(t, uint64(0x2222), binary.LittleEndian.Uint64(f.data[0][8:16]), "preempt key is the victim's")
 }

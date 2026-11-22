@@ -50,8 +50,7 @@ const (
 // Acquire actions (RACQA, cdw10 bits 2:0).
 const (
 	acquireActionAcquire      = 0
-	acquireActionPreempt      = 1
-	acquireActionPreemptAbort = 2
+	acquireActionPreemptAbort = 2 // 1 is plain Preempt, never sent
 )
 
 // Release actions (RRELA, cdw10 bits 2:0).
@@ -205,13 +204,16 @@ func (d *Device) Acquire(key uint64) error {
 // Preempt ejects the registrant holding victimKey, using this host's own
 // registered key as the current key.
 //
-// This is the fencing primitive: it is synchronous, and once it returns
-// successfully the preempted host's writes fail at the device with EBADE.
-// The Abort variant is deliberately not used — aborting outstanding commands
-// is a per-command operation with weaker guarantees than simply removing the
-// registration, and removing the registration is what stops all future I/O.
+// This is the fencing primitive, sent as Preempt and Abort rather than plain
+// Preempt.  Both remove the victim's registration, so its later writes fail at
+// the device with EBADE.  Only Preempt and Abort also covers the writes it had
+// already submitted: the NVMe Base Specification (2.0a, section 8.19) holds
+// the command's completion until every command the victim had in progress on
+// the namespace has completed, aborted or not.  A plain Preempt returns with
+// those writes possibly still executing, and the fence that follows hands the
+// victim's arenas to a peer, which an in-flight write would then overwrite.
 func (d *Device) Preempt(selfKey, victimKey uint64) error {
-	cdw10 := uint32(acquireActionPreempt) | uint32(TypeWriteExclusiveAllRegistrants)<<8
+	cdw10 := uint32(acquireActionPreemptAbort) | uint32(TypeWriteExclusiveAllRegistrants)<<8
 	return d.exec(opReservationAcquire, cdw10, 0, keyPair(selfKey, victimKey))
 }
 
