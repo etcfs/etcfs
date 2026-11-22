@@ -120,6 +120,16 @@ case "$COMPARE_BACKEND_BASE" in
             $SSH_CMD "ec2-user@$SURVIVOR" \
                 "sudo pcs status 2>&1; echo ---; sudo pcs stonith history 2>&1 || sudo stonith_admin --history '*' 2>&1" \
                 > "$RESULTS_DIR/survivor-fencing-state.txt" 2>&1 || true
+            # Why a lockspace stays in "wait fencing" after pacemaker's fence:
+            # dlm_controld only leaves it once its own fence helper,
+            # dlm_stonith, finds a fence of that nodeid newer than the failure.
+            # The dump shows each attempt and its result, and the nodelist shows
+            # whether that nodeid resolves to the name pacemaker fenced.
+            $SSH_CMD "ec2-user@$SURVIVOR" \
+                "sudo dlm_tool status 2>&1; echo ---; sudo dlm_tool dump 2>&1 | tail -150; echo ---;
+                 sudo corosync-cmapctl nodelist 2>&1; echo ---;
+                 sudo journalctl -u pacemaker --no-pager 2>&1 | grep -iE 'dlm|stonith|fence' | tail -60" \
+                > "$RESULTS_DIR/survivor-dlm-fence-debug.txt" 2>&1 || true
             # Pacemaker's own phrasing, not a word this script invented:
             # `pcs stonith history` reports a completed fence as "<node> was
             # able to turn off node <victim>", and stonith_admin as
