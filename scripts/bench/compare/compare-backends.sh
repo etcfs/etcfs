@@ -237,6 +237,34 @@ $probe" ;;
         esac
     done
 
+    # AL2's dlm_stonith aborts on every call, so DLM never learns of a fence
+    # pacemaker completed and the lockspace stays in "wait fencing" forever.
+    # The helper dlopens libstonithd, whose libqb logging asserts that the
+    # executable carries a qb_log callsite section; dlm_stonith has none.
+    # Rebuilding it from AL2's own source with one qb_log call gives it that
+    # section and changes nothing else in the GFS2 stack.
+    for ip in "${COMPARE_PUB_IPS[@]}"; do
+        # shellcheck disable=SC2016 # expanded on the node, not here
+        $SSH_CMD "ec2-user@$ip" 'set -e
+            sudo yum install -y yum-utils gcc tar cpio libqb-devel pacemaker-libs-devel libxml2-devel >/dev/null
+            cd "$(mktemp -d)"
+            yumdownloader --source dlm >/dev/null
+            rpm2cpio dlm-*.src.rpm | cpio -id --quiet "dlm-*.tar.gz"
+            tar xzf dlm-*.tar.gz --wildcards "*/fence/stonith_helper.c" "*/include/*"
+            src=$(echo dlm-*/fence/stonith_helper.c)
+            sed -i "s|^int main(|#include <qb/qblog.h>\nstatic void qb_callsite_anchor(void) { qb_log(LOG_DEBUG, \"dlm_stonith\"); }\nint main(|" "$src"
+            gcc -D_GNU_SOURCE -O2 -fPIE -pie -I"$(dirname "$src")/../include" $(xml2-config --cflags) \
+                "$src" -o dlm_stonith -ldl -lqb $(xml2-config --libs) 2>/dev/null
+            sudo install -m 755 dlm_stonith /usr/sbin/dlm_stonith' \
+            || die "gfs2-fenced: could not rebuild dlm_stonith on $ip"
+        # The rebuilt helper must reach pacemaker rather than abort: with the
+        # cluster not yet started it fails to connect, which is an exit code,
+        # not SIGABRT (134).
+        local rc=0
+        $SSH_CMD "ec2-user@$ip" "sudo /usr/sbin/dlm_stonith -n 99 -t 1 >/dev/null 2>&1" || rc=$?
+        [[ "$rc" -ne 134 ]] || die "gfs2-fenced: dlm_stonith on $ip still aborts after the rebuild"
+    done
+
     local n0="${COMPARE_PUB_IPS[0]}"
     # pcs 0.9 (AL2) and 0.10 spell authentication and setup differently, and
     # the harness spans both. The older form is tried first here because AL2 is
