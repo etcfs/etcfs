@@ -82,7 +82,7 @@ open-descriptor count first, not measuring again.
 
 **EtcFS vs EFS vs HA NFS on the data path.** Answers "why not EFS?" and
 replaces NFS's single-server "never" with an HA pair. Agreed 2026-11-22:
-`m7i.large`, 1000-IOPS io2, AL2023 for every backend, EFS in elastic mode, long
+`m7i.large`, 8000-IOPS io2 (1000 caps io2 at ~256 MiB/s), AL2023 for every backend, EFS in elastic mode, long
 runs only for EtcFS and HA NFS (EFS short only), 3 runs per point.
 - Phase 0 (no cost): `m7i.large` EBS baseline is 81.25 MB/s against a 1250 MB/s
   maximum, and io2 gives 0.256 MiB/s per provisioned IOPS (~256 MiB/s at 1000),
