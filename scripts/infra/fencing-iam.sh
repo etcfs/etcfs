@@ -107,6 +107,26 @@ read -r -d '' STONITH_POLICY <<'EOF'
 }
 EOF
 
+# The comparison suite's HA NFS pair moves one secondary private IP between its
+# two servers (Pacemaker's awsvip agent), so clients keep one address across a
+# failover. Those two calls are all the agent makes beyond DescribeInstances,
+# which the node policy above already grants. Network interfaces carry no
+# ClusterName tag of their own, so this cannot be narrowed by tag the way the
+# STONITH policy is; it moves addresses only, never instances or volumes.
+read -r -d '' NFS_VIP_POLICY <<'EOF'
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "HaNfsFloatingIp",
+      "Effect": "Allow",
+      "Action": ["ec2:AssignPrivateIpAddresses", "ec2:UnassignPrivateIpAddresses"],
+      "Resource": "arn:aws:ec2:*:*:network-interface/*"
+    }
+  ]
+}
+EOF
+
 if aws iam get-role --role-name "$ROLE" >/dev/null 2>&1; then
     log "role $ROLE already exists"
 else
@@ -131,6 +151,10 @@ aws iam put-role-policy --role-name "$ROLE" \
 log "putting the GFS2 STONITH policy on $ROLE (idempotent)..."
 aws iam put-role-policy --role-name "$ROLE" \
     --policy-name gfs2-stonith-permissions --policy-document "$STONITH_POLICY" || exit 1
+
+log "putting the HA NFS floating-IP policy on $ROLE (idempotent)..."
+aws iam put-role-policy --role-name "$ROLE" \
+    --policy-name ha-nfs-vip-permissions --policy-document "$NFS_VIP_POLICY" || exit 1
 
 log "attaching AmazonSSMManagedInstanceCore to $ROLE..."
 aws iam attach-role-policy --role-name "$ROLE" \
