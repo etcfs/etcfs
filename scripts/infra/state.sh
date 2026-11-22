@@ -63,6 +63,11 @@ SSH_CMD="ssh $SSH_OPTS"
 log()  { echo "[$(date +%T)] $*" >&2; }
 die()  { echo "ERROR: $*" >&2; exit 1; }
 
+# Burstable classes (t2, t3, t3a, t4g) are refused: once a run spends its CPU
+# credits it is throttled to the baseline rate, and its wall-clock numbers
+# measure the throttle instead of the filesystem.
+[[ "$INSTANCE_TYPE" == t[0-9]* ]] && die "burstable instance type $INSTANCE_TYPE is not allowed; use m7i.large or larger"
+
 # ---- State file helpers ----
 
 _state_file() {

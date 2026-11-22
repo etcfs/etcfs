@@ -99,8 +99,8 @@ compare_destroy() {
 #
 # Two mistakes cost most of a day and manufactured a 1.54x "regression" that
 # did not exist: several clusters benchmarking at once on one account, and a
-# burstable instance whose CPU credits were exhausted for the whole run. Both
-# are checked here rather than remembered.
+# burstable instance whose CPU credits were exhausted for the whole run. The
+# run lock below prevents the first; state.sh refuses burstable types outright.
 
 COMPARE_RUN_LOCK="${COMPARE_RUN_LOCK:-$COMPARE_PROJECT_ROOT/.compare-run.lock}"
 # Defined even when the lock is never taken (COMPARE_ALLOW_CONCURRENT=1), because
@@ -126,46 +126,19 @@ compare_take_run_lock() {
     printf '%s pid=%s started=%s\n' "$COMPARE_BACKEND" "$$" "$(date -Is)" >&"$COMPARE_LOCK_FD"
 }
 
-# compare_credit_check — on a burstable instance class, report the lowest
-# CPUCreditBalance CloudWatch saw during the run. A run that spent any of its
-# time at zero was throttled to its baseline rate, and its wall-clock numbers
-# mean nothing. Called from the teardown trap, before the instances go away;
-# CloudWatch lags a few minutes, so the last window of the run is normally
-# missing — the throttled stretch before it is what matters.
-compare_credit_check() {
-    local start="${COMPARE_RUN_START:-}"
-    [[ "${ETCFS_INSTANCE_TYPE:-}" == t* ]] || return 0
-    [[ -n "$start" ]] || return 0
-    local ids min low=""
-    mapfile -t ids < <(state_get compute_instance_ids 2>/dev/null | jq -r '.[]?' 2>/dev/null)
-    [[ ${#ids[@]} -gt 0 ]] || return 0
-    for id in "${ids[@]}"; do
-        min=$(aws cloudwatch get-metric-statistics             --namespace AWS/EC2 --metric-name CPUCreditBalance             --dimensions "Name=InstanceId,Value=$id"             --start-time "$start" --end-time "$(date -u +%Y-%m-%dT%H:%M:%SZ)"             --period 300 --statistics Minimum             --query 'min(Datapoints[].Minimum)' --output text 2>/dev/null)
-        [[ -z "$min" || "$min" == "None" ]] && { log "  $id: no CPUCreditBalance datapoints yet"; continue; }
-        log "  $id: minimum CPUCreditBalance during run = $min"
-        awk -v m="$min" 'BEGIN{exit !(m < 1)}' && low="$low $id"
-    done
-    if [[ -n "$low" ]]; then
-        log "WARNING CPU credits were exhausted on:$low"
-        log "        This run was throttled to the instance's baseline rate — do not"
-        log "        publish its wall-clock numbers. Re-run on m5.large or m7i.large."
-    fi
-}
-
 compare_begin() {
     local extra="${1:-}"
     # gluster always leaves per-node local volumes behind, whichever scenario
     # drove it — the caller shouldn't have to remember that.
     [[ -z "$extra" && "$COMPARE_BACKEND_BASE" == "gluster" ]] && extra=compare_destroy_local_volumes
     compare_take_run_lock
-    COMPARE_RUN_START=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     if [[ -n "$extra" ]]; then
         # Expanded now on purpose: extra is the caller's literal command, and
         # the local holding it is gone by the time the trap fires.
         # shellcheck disable=SC2064
-        trap "$extra; compare_credit_check; compare_destroy" EXIT
+        trap "$extra; compare_destroy" EXIT
     else
-        trap "compare_credit_check; compare_destroy" EXIT
+        trap "compare_destroy" EXIT
     fi
     compare_provision
 }

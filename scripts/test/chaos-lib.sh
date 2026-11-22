@@ -18,6 +18,14 @@ COMPOSE="docker compose -f $PROJECT_ROOT/deploy/docker/docker-compose.yml"
 # widens this instead of racing the default window.
 CHAOS_LEASE_TTL="${CHAOS_LEASE_TTL:-10s}"
 
+# Burstable classes (t2, t3, t3a, t4g) are refused: once a run spends its CPU
+# credits it is throttled to the baseline rate, and the scenario's timings
+# measure the throttle instead of the filesystem.
+if [[ "${ETCFS_INSTANCE_TYPE:-}" == t[0-9]* ]]; then
+    echo "ERROR: burstable instance type $ETCFS_INSTANCE_TYPE is not allowed; use m7i.large or larger" >&2
+    exit 1
+fi
+
 if [[ "$MODE" == "docker" ]]; then
     N1=etcfs-fuse1; N2=etcfs-fuse2; N3=etcfs-fuse3
     M1=etcfs-meta1; M2=etcfs-meta2; M3=etcfs-meta3
