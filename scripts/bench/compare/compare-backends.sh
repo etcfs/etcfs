@@ -301,8 +301,12 @@ $probe" ;;
         inst=$(state_get compute_instance_ids | jq -r ".[$i]")
         map+="${names[$i]}:$inst;"
     done
+    # pcmk_reboot_action=off: dlm_stonith always asks for a reboot, which
+    # fence_aws performs as stop-then-start, so the dead instance was powered
+    # back on and DLM waited for it to run before releasing its locks.
     $SSH_CMD "ec2-user@$n0" "sudo pcs stonith create clusterfence fence_aws \
         region=$AWS_DEFAULT_REGION pcmk_host_map='$map' \
+        pcmk_reboot_action=off \
         power_timeout=600 pcmk_off_timeout=600 pcmk_reboot_timeout=480 \
         pcmk_reboot_retries=4 power_wait=5" \
         || die "gfs2-fenced: STONITH device not created"
