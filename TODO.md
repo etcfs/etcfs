@@ -123,11 +123,6 @@ runs only for EtcFS and HA NFS (EFS short only), 3 runs per point.
       in a real harness: single-run medians, one instance type, and an ext4
       control on the gp3 root volume against io2 for EtcFS. Candidates beyond
       git: SQLite, a build cache, a Prometheus TSDB.
-- [ ] **GFS2's takeover under fencing.** With `fence_aws` confirmed at ~10 s the
-      survivors keep serving, but the dead node's inode was still not recovered
-      inside 180 s. Needs `dlm_tool ls` and the recovery journal inspected while
-      it is happening to say whether a step is missing from the setup or that is
-      GFS2's own behaviour.
 
 
 # Big Extensions or Impactful changes
