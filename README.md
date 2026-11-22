@@ -86,7 +86,7 @@ volume. Method and caveats are in the
 | --- | --- | --- |
 | **EtcFS** | **3.0–3.5 s** (8 runs) | kept writing (≤1.5 s worst gap) |
 | gluster | 22.3–22.7 s (3 runs) | kept writing, 77–78 s worst gap |
-| gfs2 | never, inside 180 s | **stopped for the rest of the run** |
+| gfs2 + `fence_aws` | 15.9–21.7 s (4 runs) | paused 12–17 s until the fence was confirmed |
 | nfs | never | client hung on the hard mount |
 | juicefs | never (`t3.medium`) | 3,356 errors, no recovery |
 

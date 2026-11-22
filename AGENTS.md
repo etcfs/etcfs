@@ -33,13 +33,11 @@ conclusion at least once. Read before benchmarking anything.
   days; the competitor tables are `t3.medium` and today's runs are
   `m7i.large`, and mixing them proves nothing.
 - **Burstable instances lie.** `t3.medium` exhausts CPU credits minutes into a
-  sustained untar, which once manufactured a 1.54x "regression". Use
-  `m7i.large` (or `m5.large`) for long runs, one at a time, and check
-  `CPUCreditBalance` afterwards. The comparison harness now enforces both
-  halves: a second run refuses to start while one is in flight
-  (`COMPARE_ALLOW_CONCURRENT=1` overrides), and a run on a `t*` instance
-  reports the lowest credit balance CloudWatch saw before it tears the
-  cluster down.
+  sustained untar, which once manufactured a 1.54x "regression". The scripts
+  enforce both halves: `scripts/infra/state.sh` and `scripts/test/chaos-lib.sh`
+  refuse any `t*` instance type (default `m7i.large`), and a second comparison
+  run refuses to start while one is in flight (`COMPARE_ALLOW_CONCURRENT=1`
+  overrides).
 - **Instrument before predicting.** Estimating a change's saving from the
   design was wrong four times in a row on the same workload — 2.05, 4.0, 7.2
   and "batching removes one commit" all failed, while the counter got it right
