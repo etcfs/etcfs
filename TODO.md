@@ -8,6 +8,13 @@ EtcFS wins and loses.
 
 ## Next steps, ranked
 
+**0a. Fix the failing security CI.** The security workflow is red on `main`;
+find which job fails and why before changing anything.
+
+**0b. Let Dependabot updates merge themselves when every check passes.**
+Auto-merge for Dependabot PRs gated on the full required-check set, so a bump
+lands only when tests, lint and security are green.
+
 **1. Decide the Terraform misconfiguration findings.** Scanning is in place and
 reports 21, none of them silenced. They need answers rather than patches:
 encryption at rest on the shared volume and the root devices is the one that

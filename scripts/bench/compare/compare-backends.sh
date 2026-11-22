@@ -30,6 +30,7 @@ compare_mount() {
         gfs2)    compare_mount_gfs2 ;;
         gluster) compare_mount_gluster "$mount_all" ;;
         juicefs) compare_mount_juicefs "$mount_all" ;;
+        efs)     compare_mount_efs "$mount_all" ;;
         *) die "compare_mount: unknown backend $COMPARE_BACKEND" ;;
     esac
     N0="${BENCH_NODES[0]}"
@@ -70,10 +71,198 @@ compare_mount_etcfs() {
 }
 
 compare_mount_nfs() {
+    if [[ "$COMPARE_BACKEND" == "nfs-ha" ]]; then
+        compare_mount_nfs_ha
+        return
+    fi
     compare_export_backing "${COMPARE_PUB_IPS[0]}" "${COMPARE_PRIV_IPS[0]}" "${COMPARE_PUB_IPS[@]:1}"
     MOUNT_PATH="$BACKING_PATH"
     COMPARE_REMOTE_MOUNT_CMD="sudo mount -t nfs4 ${COMPARE_PRIV_IPS[0]}:$BACKING_PATH $BACKING_PATH"
     BENCH_NODES=("${COMPARE_PUB_IPS[@]:1}" "${COMPARE_PUB_IPS[0]}")
+}
+
+# compare_mount_efs — an EFS file system in elastic throughput mode, the managed
+# alternative a cloud user would pick instead of a shared block device. Elastic,
+# not bursting: a new file system's bursting baseline scales with how little it
+# stores and spends credits, so consecutive runs would measure the credit
+# balance. The ID is written to state before the mount target is made, because
+# destroy-infra.sh deletes whatever bench_efs_id names and a failure between the
+# two calls would otherwise leave the file system behind.
+compare_mount_efs() {
+    local mount_all="$1" sg subnet efs_id mt_out mt_state mt_ip ip deadline
+    sg=$(state_get sg_id | tr -d '"')
+    subnet=$(state_get subnet_id | tr -d '"')
+    efs_id=$(aws efs create-file-system --performance-mode generalPurpose \
+        --throughput-mode elastic \
+        --tags "Key=ClusterName,Value=$CLUSTER_NAME" "Key=Name,Value=${CLUSTER_NAME}-efs" \
+        --query 'FileSystemId' --output text) || die "compare_mount_efs: create-file-system failed"
+    state_put bench_efs_id "\"$efs_id\""
+    compare_open_port 2049
+    aws efs wait file-system-available --file-system-id "$efs_id" 2>/dev/null || true
+
+    deadline=$((SECONDS + 120))
+    until mt_out=$(aws efs create-mount-target --file-system-id "$efs_id" \
+            --subnet-id "$subnet" --security-groups "$sg" 2>&1); do
+        [[ "$mt_out" == *IncorrectFileSystemLifeCycleState* && $SECONDS -lt $deadline ]] \
+            || die "compare_mount_efs: create-mount-target: $mt_out"
+        sleep 5
+    done
+    deadline=$((SECONDS + 300))
+    until [[ "${mt_state:-}" == "available" ]]; do
+        [[ $SECONDS -lt $deadline ]] || die "compare_mount_efs: mount target never became available"
+        sleep 5
+        mt_state=$(aws efs describe-mount-targets --file-system-id "$efs_id" \
+            --query 'MountTargets[0].LifeCycleState' --output text 2>/dev/null || echo "")
+    done
+    mt_ip=$(aws efs describe-mount-targets --file-system-id "$efs_id" \
+        --query 'MountTargets[0].IpAddress' --output text)
+
+    MOUNT_PATH=/mnt/compare-efs
+    # The mount target's IP rather than the file system's DNS name: the private
+    # DNS record can lag the mount target by minutes (see efs_mount).
+    COMPARE_REMOTE_MOUNT_CMD="sudo mount -t nfs4 -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport $mt_ip:/ $MOUNT_PATH"
+    BENCH_NODES=("${COMPARE_PUB_IPS[@]}")
+    [[ "$mount_all" == 1 ]] || BENCH_NODES=("${COMPARE_PUB_IPS[0]}")
+    for ip in "${BENCH_NODES[@]}"; do
+        $SSH_CMD "ec2-user@$ip" "sudo dnf install -y nfs-utils >/dev/null 2>&1; sudo mkdir -p $MOUNT_PATH && $COMPARE_REMOTE_MOUNT_CMD && sudo chmod 1777 $MOUNT_PATH" \
+            || die "compare_mount_efs: mount failed on $ip"
+    done
+}
+
+# compare_mount_nfs_ha — NFS made highly available the standard way: an
+# active/passive pair under Pacemaker on the shared volume. xfs, nfsserver,
+# exportfs and the client-facing address move together as one group, on
+# cmp-n1 by preference and cmp-n2 otherwise, and a fence_aws STONITH device
+# powers off a failed server before its successor mounts the filesystem — xfs is
+# not a cluster filesystem, so two servers mounting it at once corrupts it.
+# cmp-n3 is a cluster member for quorum and a client, never a server.
+#
+# The address is a secondary private IP that awsvip moves between the servers'
+# network interfaces and IPaddr2 configures in the OS, so clients keep one
+# mount across a failover. fence_aws is not packaged for AL2023 and is built
+# from a pinned upstream release. No DLM is involved: Pacemaker fences with
+# stonith-action=off itself, and pcmk_reboot_action=off covers any reboot
+# request as well.
+compare_mount_nfs_ha() {
+    local ip i cluster=comparenfs pw=etcfsbench inst map="" dev vol eni cidr mask vip
+    local policy
+    for policy in ha-nfs-vip-permissions gfs2-stonith-permissions; do
+        aws iam get-role-policy --role-name etcfs-nodes --policy-name "$policy" >/dev/null 2>&1 \
+            || die "nfs-ha needs $policy on etcfs-nodes: run scripts/infra/fencing-iam.sh create"
+    done
+
+    compare_open_port_udp 5404 5405  # corosync totem
+    compare_open_port 2224           # pcsd
+    compare_open_port 3121           # pacemaker
+    compare_open_port 2049           # nfs
+
+    local names=() hosts=""
+    for i in "${!COMPARE_PRIV_IPS[@]}"; do
+        names+=("cmp-n$((i+1))")
+        hosts+="${COMPARE_PRIV_IPS[$i]} cmp-n$((i+1))"$'\n'
+    done
+
+    # Packages and the fence agent, on every node in parallel: the agent build
+    # dominates, and it does not depend on anything the other nodes do.
+    local pids=()
+    for i in "${!COMPARE_PUB_IPS[@]}"; do
+        $SSH_CMD "ec2-user@${COMPARE_PUB_IPS[$i]}" "set -e
+            sudo dnf install -y pcs pacemaker resource-agents nfs-utils xfsprogs awscli-2 git \
+                python3-boto3 python3-pycurl python3-pexpect python3-requests autoconf automake \
+                libtool make gcc pkgconf-pkg-config libxslt systemd-devel diffutils >/dev/null
+            sudo hostnamectl set-hostname ${names[$i]}
+            echo '$hosts' | sudo tee -a /etc/hosts >/dev/null
+            echo 'hacluster:$pw' | sudo chpasswd
+            sudo systemctl enable --now pcsd >/dev/null 2>&1
+            cd /tmp && rm -rf fence-agents && git clone -q https://github.com/ClusterLabs/fence-agents.git
+            cd fence-agents && git checkout -q v4.16.0
+            ./autogen.sh >/dev/null 2>&1 && ./configure --with-agents=aws >/dev/null 2>&1
+            make >/dev/null 2>&1 && sudo make install >/dev/null 2>&1
+            /usr/sbin/fence_aws -o metadata | grep -q '<resource-agent'" > "$RESULTS_DIR/node-setup-$i.log" 2>&1 &
+        pids+=($!)
+    done
+    for i in "${!pids[@]}"; do
+        wait "${pids[$i]}" || die "nfs-ha: node setup failed on ${COMPARE_PUB_IPS[$i]} — see $RESULTS_DIR/node-setup-$i.log"
+    done
+
+    local n0="${COMPARE_PUB_IPS[0]}"
+    $SSH_CMD "ec2-user@$n0" "sudo pcs host auth ${names[*]} -u hacluster -p $pw" >/dev/null \
+        || die "nfs-ha: pcs host auth failed"
+    $SSH_CMD "ec2-user@$n0" "sudo pcs cluster setup $cluster ${names[*]} --force && sudo pcs cluster start --all" >/dev/null \
+        || die "nfs-ha: cluster setup failed"
+    for _ in $(seq 1 40); do
+        $SSH_CMD "ec2-user@$n0" "sudo pcs status 2>/dev/null | grep -q 'partition with quorum'" && break
+        sleep 3
+    done
+
+    $SSH_CMD "ec2-user@$n0" "
+        sudo pcs property set stonith-enabled=true
+        sudo pcs property set stonith-action=off
+        sudo pcs property set no-quorum-policy=stop
+        sudo pcs property set stonith-timeout=600s" >/dev/null
+    for i in "${!names[@]}"; do
+        inst=$(state_get compute_instance_ids | jq -r ".[$i]")
+        map+="${names[$i]}:$inst;"
+    done
+    $SSH_CMD "ec2-user@$n0" "sudo pcs stonith create clusterfence fence_aws \
+        region=$AWS_DEFAULT_REGION pcmk_host_map='$map' pcmk_reboot_action=off \
+        power_timeout=600 pcmk_off_timeout=600 power_wait=5" >/dev/null \
+        || die "nfs-ha: STONITH device not created"
+
+    # The volume by its stable by-id name: the NVMe namespace number of a
+    # Multi-Attach volume is per instance and need not match across servers.
+    vol=$(state_get volume_id | tr -d '"')
+    dev="/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${vol//-/}"
+    $SSH_CMD "ec2-user@$n0" "set -e
+        sudo mkfs.xfs -f $dev >/dev/null
+        sudo mkdir -p /srv/nfs && sudo mount $dev /srv/nfs
+        sudo mkdir -p /srv/nfs/export /srv/nfs/nfsinfo && sudo chmod 1777 /srv/nfs/export
+        sudo umount /srv/nfs" || die "nfs-ha: formatting the shared volume failed"
+
+    # A free address in the servers' subnet, reserved by letting EC2 pick one
+    # for cmp-n1's interface. It disappears with the interface at teardown.
+    eni=$(aws ec2 describe-instances --instance-ids "$(state_get compute_instance_ids | jq -r '.[0]')" \
+        --query 'Reservations[0].Instances[0].NetworkInterfaces[0].NetworkInterfaceId' --output text)
+    aws ec2 assign-private-ip-addresses --network-interface-id "$eni" \
+        --secondary-private-ip-address-count 1 >/dev/null || die "nfs-ha: could not reserve a floating IP"
+    # shellcheck disable=SC2016 # backticks are JMESPath literals, not shell
+    vip=$(aws ec2 describe-network-interfaces --network-interface-ids "$eni" \
+        --query 'NetworkInterfaces[0].PrivateIpAddresses[?Primary==`false`].PrivateIpAddress | [0]' --output text)
+    cidr=$(aws ec2 describe-subnets --subnet-ids "$(state_get subnet_id | tr -d '"')" \
+        --query 'Subnets[0].CidrBlock' --output text)
+    mask="${cidr#*/}"
+    [[ "$vip" =~ ^[0-9.]+$ ]] || die "nfs-ha: no floating IP reserved"
+
+    $SSH_CMD "ec2-user@$n0" "set -e
+        sudo pcs resource create nfsfs ocf:heartbeat:Filesystem device=$dev directory=/srv/nfs fstype=xfs --group nfsgroup
+        sudo pcs resource create nfsd ocf:heartbeat:nfsserver nfs_shared_infodir=/srv/nfs/nfsinfo --group nfsgroup
+        sudo pcs resource create nfsexport ocf:heartbeat:exportfs clientspec=$cidr \
+            options=rw,sync,no_root_squash directory=/srv/nfs/export fsid=1 --group nfsgroup
+        sudo pcs resource create nfsawsvip ocf:heartbeat:awsvip secondary_private_ip=$vip auth_type=role --group nfsgroup
+        sudo pcs resource create nfsip ocf:heartbeat:IPaddr2 ip=$vip cidr_netmask=$mask --group nfsgroup
+        sudo pcs constraint location nfsgroup prefers ${names[0]}=100
+        sudo pcs constraint location nfsgroup avoids ${names[2]}" >/dev/null \
+        || die "nfs-ha: cluster resources not created"
+
+    log "Waiting for the NFS group to start on ${names[0]}..."
+    for _ in $(seq 1 60); do
+        $SSH_CMD "ec2-user@$n0" "sudo pcs status resources 2>/dev/null | grep -q 'nfsip.*Started ${names[0]}'" && break
+        sleep 5
+    done
+    if ! $SSH_CMD "ec2-user@$n0" "sudo pcs status resources 2>/dev/null | grep -q 'nfsip.*Started ${names[0]}'"; then
+        $SSH_CMD "ec2-user@$n0" "sudo pcs status --full 2>&1 | tail -50" > "$RESULTS_DIR/group-start-failure.txt" 2>&1 || true
+        die "nfs-ha: the NFS group never started — see $RESULTS_DIR/group-start-failure.txt"
+    fi
+
+    MOUNT_PATH=/mnt/compare-nfs
+    COMPARE_REMOTE_MOUNT_CMD="sudo mount -t nfs4 -o hard,timeo=600,retrans=2 $vip:/srv/nfs/export $MOUNT_PATH"
+    # The client the node-kill survivor probes from is cmp-n3, which never
+    # serves; cmp-n1, the active server and the failure target, is last.
+    BENCH_NODES=("${COMPARE_PUB_IPS[2]}" "${COMPARE_PUB_IPS[1]}" "${COMPARE_PUB_IPS[0]}")
+    for ip in "${BENCH_NODES[@]}"; do
+        $SSH_CMD "ec2-user@$ip" "sudo mkdir -p $MOUNT_PATH && $COMPARE_REMOTE_MOUNT_CMD" \
+            || die "nfs-ha: client mount failed on $ip"
+    done
 }
 
 # compare_mount_gfs2 brings up the bare corosync + dlm stack every GFS2 run
