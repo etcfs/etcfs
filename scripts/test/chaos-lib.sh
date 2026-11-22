@@ -537,7 +537,7 @@ for d in json.load(sys.stdin).get('blockdevices', []):
         local inst
         local iam_profile; iam_profile=$("$PROJECT_ROOT/scripts/infra/fencing-iam.sh" profile-name)
         inst=$(aws ec2 run-instances \
-            --image-id "$ami_id" --instance-type t3.medium --key-name "$key_name" \
+            --image-id "$ami_id" --instance-type "${ETCFS_INSTANCE_TYPE:-m7i.large}" --key-name "$key_name" \
             --security-group-ids "$sg" --subnet-id "$subnet_id" --associate-public-ip-address \
             --iam-instance-profile "Name=$iam_profile" \
             --block-device-mappings '[{"DeviceName":"/dev/xvda","Ebs":{"VolumeSize":20,"VolumeType":"gp3"}}]' \
