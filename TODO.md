@@ -87,6 +87,13 @@ open-descriptor count first, not measuring again.
 
 ## Pending benchmark work
 
+**Back-to-back runs of one backend can race their own teardown.** Teardown is
+asynchronous and the next run reuses the state file's security group ID, so a
+run started while the previous one is still deleting that group fails at
+`RunInstances` with `InvalidGroup.NotFound` (seen once in six consecutive
+`etcfs` runs with a 120 s gap). Either wait for the previous teardown's group
+deletion, or never reuse a group ID from state.
+
 **EtcFS vs EFS vs HA NFS on the data path.** Answers "why not EFS?" and
 replaces NFS's single-server "never" with an HA pair. Agreed 2026-11-22:
 `m7i.large`, 8000-IOPS io2 (1000 caps io2 at ~256 MiB/s), AL2023 for every backend, EFS in elastic mode, long
