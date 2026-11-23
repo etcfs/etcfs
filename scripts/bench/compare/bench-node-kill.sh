@@ -47,6 +47,19 @@ compare_mount
 [[ "${#BENCH_NODES[@]}" -ge 2 ]] || die "node-kill needs two nodes with the filesystem mounted"
 SURVIVOR="${BENCH_NODES[0]}"
 VICTIM="$(compare_failure_target)"
+# An HA NFS pair serves from whichever node Pacemaker placed the group on, which
+# is not always the preferred one; killing the standby measures nothing. The
+# victim is the node serving at the moment of the kill, and the cluster's view
+# is kept from before and after it.
+if [[ "$COMPARE_BACKEND" == "nfs-ha" ]]; then
+    active=$($SSH_CMD "ec2-user@$SURVIVOR" "sudo crm_resource --resource nfsgroup --locate 2>/dev/null" \
+        | grep -oE 'cmp-n[0-9]+' | head -1)
+    [[ -n "$active" ]] || die "nfs-ha: could not locate the NFS group before the kill"
+    VICTIM="${COMPARE_PUB_IPS[$(( ${active#cmp-n} - 1 ))]}"
+    [[ "$VICTIM" != "$SURVIVOR" ]] || die "nfs-ha: the probing client is the active server"
+    $SSH_CMD "ec2-user@$SURVIVOR" "sudo pcs status --full 2>&1" > "$RESULTS_DIR/nfs-ha-before-kill.txt" 2>&1 || true
+    log "nfs-ha: NFS group active on $active ($VICTIM)"
+fi
 SHARED="$MOUNT_PATH/kill-target.dat"
 OWNED="$MOUNT_PATH/kill-victim-owned.dat"
 
@@ -143,6 +156,20 @@ case "$COMPARE_BACKEND_BASE" in
                 compare_headline node-kill fence_confirmed 0 bool
                 log "WARNING no successful fence is recorded on the survivor — the recovery"
                 log "        number below is not a fenced recovery, whatever it says"
+            fi
+        fi
+        ;;
+    nfs)
+        if [[ "$COMPARE_BACKEND" == "nfs-ha" ]]; then
+            $SSH_CMD "ec2-user@$SURVIVOR" \
+                "sudo pcs status --full 2>&1; echo ---; sudo pcs stonith history 2>&1" \
+                > "$RESULTS_DIR/nfs-ha-after-kill.txt" 2>&1 || true
+            if grep -qiE 'turning off of cmp-n[0-9]+ successful|was able to turn off' \
+                   "$RESULTS_DIR/nfs-ha-after-kill.txt" 2>/dev/null; then
+                compare_headline node-kill fence_confirmed 1 bool
+            else
+                compare_headline node-kill fence_confirmed 0 bool
+                log "WARNING no successful fence is recorded on the survivor"
             fi
         fi
         ;;

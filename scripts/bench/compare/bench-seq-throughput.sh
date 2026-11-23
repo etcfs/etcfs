@@ -79,7 +79,10 @@ agg_write() {
 compare_begin
 N0="${COMPARE_PUB_IPS[0]}"
 
-if [[ "$COMPARE_BACKEND_BASE" == "etcfs" && "$LEGS" == all ]]; then
+# Not on long runs: forty minutes of raw I/O would spend the instance's EBS
+# burst before the filesystem legs start, and a backend with no raw legs would
+# start its own with the burst intact.
+if [[ "$COMPARE_BACKEND_BASE" == "etcfs" && "$LEGS" == all && "$LONG" == 0 ]]; then
     compare_install_fio "$N0"
     RAW_DEV=$(compare_shared_device "$N0")
     log "Raw-device ceiling on $RAW_DEV (before EtcFS touches it)..."
