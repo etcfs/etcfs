@@ -31,4 +31,6 @@ jobs:
           TITLE: ${{ github.event.pull_request.title }}
         run: |
           gh pr edit "$PR_URL" --title "${TITLE/ bump / bumped }"
-          gh pr merge --auto "$PR_URL"
+          # A merge queue sets the method itself and rejects one; without a
+          # queue, gh needs one.
+          gh pr merge --auto "$PR_URL" || gh pr merge --auto --squash "$PR_URL"
