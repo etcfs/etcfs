@@ -33,10 +33,11 @@ and no separate lock manager; I/O fencing has
 
 ## Highlights
 
-Measured against GFS2, GlusterFS, NFS and JuiceFS, each on its own AWS cluster
+Measured against GFS2, GlusterFS, NFS (single server and an HA pair), JuiceFS and Amazon EFS, each on its own AWS cluster
 ([benchmark overview](https://github.com/etcfs/etcfs-docs/blob/main/docs/reports/benchmark-reports/overview.md)).
 
-- **Node loss:** a survivor takes over a dead node's file in **3.0–3.5 s**; GFS2, NFS and JuiceFS never recover it within 180 s.
+- **Node loss:** a survivor takes over a dead node's file in **3.0–3.5 s**, against 12.1–12.4 s for an HA NFS pair and 15.9–21.7 s for GFS2 with a fence device; single-server NFS and JuiceFS never recover it.
+- **Large files:** an 8 GiB file written on one node is read on another at **473 MiB/s**, 1.9x an HA NFS pair and 4.7x EFS; the HA pair writes 1.2–1.3x faster from several jobs or nodes.
 - **Membership changes:** a node joining or leaving stalls the others for **~0.1 s**.
 - **Scaling:** shared-directory metadata throughput rises **79%** from two to six nodes, while GFS2's falls 44%.
 - **Online growth:** new space is allocatable in **3.9 s**, with no remount.
