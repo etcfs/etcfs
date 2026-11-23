@@ -238,7 +238,7 @@ compare_mount_nfs_ha() {
         sudo pcs resource create nfsd ocf:heartbeat:nfsserver nfs_shared_infodir=/srv/nfs/nfsinfo --group nfsgroup
         sudo pcs resource create nfsexport ocf:heartbeat:exportfs clientspec=$cidr \
             options=rw,sync,no_root_squash directory=/srv/nfs/export fsid=1 --group nfsgroup
-        sudo pcs resource create nfsawsvip ocf:heartbeat:awsvip secondary_private_ip=$vip auth_type=role --group nfsgroup
+        sudo pcs resource create nfsawsvip ocf:heartbeat:awsvip secondary_private_ip=$vip auth_type=role region=$AWS_DEFAULT_REGION --group nfsgroup
         sudo pcs resource create nfsip ocf:heartbeat:IPaddr2 ip=$vip cidr_netmask=$mask --group nfsgroup
         sudo pcs constraint location nfsgroup prefers ${names[0]}=100
         sudo pcs constraint location nfsgroup avoids ${names[2]}" >/dev/null \
