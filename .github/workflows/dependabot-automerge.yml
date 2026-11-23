@@ -1,0 +1,29 @@
+name: Dependabot auto-merge
+
+# Turns on GitHub's auto-merge for Dependabot's minor and patch updates, so each
+# merges itself once the branch rules' required checks pass and never before.
+# Major updates are left for a person: the required checks do not run the
+# release job, so a passing pull request says nothing about whether a new major
+# version of a release action still publishes. The squash commit keeps the
+# repository's header-only convention: the title in the past tense, no body.
+on: pull_request
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read the update type
+        id: meta
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+      - name: Enable auto-merge
+        if: steps.meta.outputs.update-type != 'version-update:semver-major'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          TITLE: ${{ github.event.pull_request.title }}
+        run: gh pr merge --auto --squash --subject "${TITLE/ bump / bumped }" --body "" "$PR_URL"

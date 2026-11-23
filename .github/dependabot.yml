@@ -4,12 +4,14 @@ version: 2
 # request that fixes it. The two are complementary — the scan fails a build
 # that ships a known-vulnerable path, and these keep the tree from drifting far
 # enough for that to be a large upgrade.
+# Monthly, and grouped per ecosystem, so an idle month costs at most three
+# pull requests. Minor and patch updates merge themselves once the required
+# checks pass; major ones wait for review (workflows/dependabot-automerge.yml).
 updates:
   - package-ecosystem: gomod
     directory: /
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     open-pull-requests-limit: 5
     groups:
       # One pull request for the routine drift, so a genuinely interesting
@@ -23,12 +25,19 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
+    # One pull request for every action: the CodeQL init, analyze and
+    # upload-sarif steps must move together, and separate pull requests for
+    # them fail CodeQL until the last one lands.
+    groups:
+      actions:
+        patterns: ["*"]
 
   - package-ecosystem: docker
     directories:
       - /deploy/docker
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
+    groups:
+      images:
+        patterns: ["*"]
