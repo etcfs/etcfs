@@ -8,13 +8,6 @@ EtcFS wins and loses.
 
 ## Next steps, ranked
 
-**0a. Fix the failing security CI.** The security workflow is red on `main`;
-find which job fails and why before changing anything.
-
-**0b. Let Dependabot updates merge themselves when every check passes.**
-Auto-merge for Dependabot PRs gated on the full required-check set, so a bump
-lands only when tests, lint and security are green.
-
 **1. Decide the Terraform misconfiguration findings.** Scanning is in place and
 reports 21, none of them silenced. They need answers rather than patches:
 encryption at rest on the shared volume and the root devices is the one that
@@ -86,26 +79,6 @@ that hop away are the ones blocked above. Reviving this means solving the
 open-descriptor count first, not measuring again.
 
 ## Pending benchmark work
-
-**EtcFS vs EFS vs HA NFS on the data path.** Answers "why not EFS?" and
-replaces NFS's single-server "never" with an HA pair. Agreed 2026-11-22:
-`m7i.large`, 8000-IOPS io2 (1000 caps io2 at ~256 MiB/s), AL2023 for every backend, EFS in elastic mode, long
-runs only for EtcFS and HA NFS (EFS short only), 3 runs per point.
-- Phase 0 (no cost): `m7i.large` EBS baseline is 81.25 MB/s against a 1250 MB/s
-  maximum, and io2 gives 0.256 MiB/s per provisioned IOPS (~256 MiB/s at 1000),
-  yet `cross-node-handoff.md` reports 415.65 MiB/s on this volume: explain that
-  first. Also: `fence_aws` on AL2023 (no package; install from upstream), EFS
-  elastic prices, and why `performance-benchmarks.md` has EtcFS seqwrite at 40
-  MiB/s.
-- Phase 1: raw io2, EtcFS and EFS on one node, sequential 1 MiB at matched queue
-  depth, 8 GiB file, 60 s and 20 min. **Stop point:** if EtcFS does not beat EFS
-  on sequential throughput, decide before building HA NFS.
-- Phase 2: `efs` backend in `compare-backends.sh` (reuse `efs_create`/`efs_mount`,
-  tagged, deleted in teardown); handoff, single-node and an aggregate job.
-- Phase 3: `nfs-ha` backend: Pacemaker + `fence_aws` + Filesystem(xfs) →
-  nfsserver → exportfs → awsvip; same data scenarios plus node-kill on the
-  active server.
-- Phase 4: report, overview rows, thesis ch09, deck slide 14's EFS column, qa.md.
 
 - [ ] **Multi-hour fuzzing beyond two hours.** A two-hour run (319,465
       operations, 317 injected faults) is clean on memory, file descriptors and
