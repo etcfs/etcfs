@@ -30,8 +30,15 @@ case "$COMPARE_BACKEND_BASE" in
     gfs2|gluster) export ETCFS_AMI_NAME_FILTER="${ETCFS_AMI_NAME_FILTER:-amzn2-ami-hvm-*-x86_64-gp2}" ;;
 esac
 
-export ETCFS_STATE="$COMPARE_PROJECT_ROOT/infra-state-compare-${COMPARE_BACKEND}.json"
-export ETCFS_CLUSTER="compare-${COMPARE_BACKEND}"
+# One cluster name and state file per run, not per backend. Teardown is
+# asynchronous, so the next run of the same backend can start while the last
+# one is still being deleted; with a shared name it adopted the old run's
+# security group by name moments before teardown deleted it (RunInstances then
+# fails with InvalidGroup.NotFound), and the old teardown's final rm of the
+# state file deleted the new run's.
+COMPARE_RUN_ID="${COMPARE_RUN_ID:-$(date +%Y%m%d-%H%M%S)-$$}"
+export ETCFS_STATE="$COMPARE_PROJECT_ROOT/infra-state-compare-${COMPARE_BACKEND}-${COMPARE_RUN_ID}.json"
+export ETCFS_CLUSTER="compare-${COMPARE_BACKEND}-${COMPARE_RUN_ID}"
 export ETCFS_COMPUTE_NODES="${ETCFS_COMPUTE_NODES:-3}"
 export ETCFS_VOLUME_IOPS="${ETCFS_VOLUME_IOPS:-1000}"
 export ETCFS_VOLUME_SIZE="${ETCFS_VOLUME_SIZE:-20}"
@@ -87,7 +94,7 @@ compare_destroy() {
     # held, so the next run in a serial queue is refused by a cluster that is
     # already being deleted.
     nohup bash "$INFRA_DIR/destroy-infra.sh" --force \
-        > "$COMPARE_PROJECT_ROOT/teardown-${COMPARE_BACKEND}.log" 2>&1 \
+        > "$COMPARE_PROJECT_ROOT/teardown-${COMPARE_BACKEND}-${COMPARE_RUN_ID}.log" 2>&1 \
         {COMPARE_LOCK_FD}>&- &
     disown
 }
@@ -294,7 +301,7 @@ compare_destroy_local_volumes() {
                 sleep 5
             done
         done
-    ) > "$COMPARE_PROJECT_ROOT/teardown-${COMPARE_BACKEND}-local-volumes.log" 2>&1 &
+    ) > "$COMPARE_PROJECT_ROOT/teardown-${COMPARE_BACKEND}-${COMPARE_RUN_ID}-local-volumes.log" 2>&1 &
     disown
 }
 
