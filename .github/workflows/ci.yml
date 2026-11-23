@@ -5,6 +5,10 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
+  # The merge queue tests each pull request on top of the current main and
+  # needs the required checks to run there too. The release job is push-only,
+  # so a queue run never publishes.
+  merge_group:
 
 # Read-only by default; the two jobs that publish widen it themselves. Granted
 # at the top instead, every job in the file runs with a token that can write to
