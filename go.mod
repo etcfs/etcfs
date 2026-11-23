@@ -13,7 +13,7 @@ go 1.26.0
 // library advisories that a current toolchain has already fixed. Nothing
 // updates it automatically — Dependabot supports neither the `toolchain`
 // directive nor a .go-version file — so treat it as a minimum, not a pin.
-toolchain go1.26.6
+toolchain go1.26.11
 
 require (
 	github.com/anishathalye/porcupine v1.3.1
