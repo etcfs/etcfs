@@ -102,7 +102,7 @@ for c in $(seq 1 "$CYCLES"); do
     t_out=$first
     # etcd's own JSON log carries an RFC 3339 timestamp with sub-second digits.
     ready=$($SSH_CMD "ec2-user@$NEW_PUB" "grep -m1 'ready to serve client requests' /tmp/etcd.log" \
-        | jq -r '.ts // empty' | xargs -r -I{} date -d {} +%s.%N)
+        | jq -r '.ts // empty' | xargs -r -I{} date -d {} +%s.%N || true)
     owns=$($SSH_CMD "ec2-user@$PROBE_NODE" "$ETCDCTL get --prefix 'arena:$NODE_ID/' --keys-only | grep -c . || true")
 
     s_launch=$(step_at "$addlog" "Launching instance")
