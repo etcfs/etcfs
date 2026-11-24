@@ -20,7 +20,9 @@ source "$SCRIPT_DIR/compare-lib.sh"
 RUNS="$1"
 SCRIPT="$SCRIPT_DIR/$(basename "$2")"
 [[ -x "$SCRIPT" ]] || die "$SCRIPT is not an executable scenario"
-TAG="$(basename "$SCRIPT" .sh)-n${ETCFS_ELASTIC_NODES:-default}"
+# ETCFS_REPEAT_TAG names the variant (an interval, a lock count), so two
+# series of one script do not share a directory.
+TAG="$(basename "$SCRIPT" .sh)-n${ETCFS_ELASTIC_NODES:-default}${ETCFS_REPEAT_TAG:+-$ETCFS_REPEAT_TAG}"
 OUT="$RESULTS_DIR/repeat-$TAG"
 mkdir -p "$OUT"
 
