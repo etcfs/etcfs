@@ -346,7 +346,7 @@ compare_mount_gfs2() {
     # one that has not fails its mount (and, for a node held back as a joiner,
     # later fails the join) for a reason that has nothing to do with GFS2.
     for ip in "${COMPARE_PUB_IPS[@]}"; do compare_reattach_volume_if_missing "$ip"; done
-    dev=$(compare_shared_device "${COMPARE_PUB_IPS[0]}")
+    dev="$(compare_shared_dev_path)"
     # One journal per node by default. COMPARE_GFS2_JOURNALS formats fewer, so
     # the nodes past that count stay unmounted for bench-gfs2-journal-add.sh.
     local journals="${COMPARE_GFS2_JOURNALS:-${#COMPARE_PUB_IPS[@]}}"
@@ -827,20 +827,27 @@ compare_etcfs_snapshot_cmdline() {
 # External fencing detaches on purpose and never puts a volume back by itself
 # (see bootstrap-cluster.sh's own comment) — this is a benchmark script
 # standing in for the operator action that fencing expects to follow it.
+# compare_shared_dev_path — the shared volume's name on every node alike.
+compare_shared_dev_path() {
+    echo "/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${COMPARE_VOL_ID//-/}"
+}
+
 compare_reattach_volume_if_missing() {
-    local ip="$1" i inst
-    $SSH_CMD "ec2-user@$ip" "[[ -e /dev/nvme1n1 ]]" 2>/dev/null && return 0
+    local ip="$1" i inst dev
+    # By the volume's serial, not /dev/nvme1n1: NVMe enumeration order is not
+    # stable, and on some nodes the shared volume comes up as another name.
+    dev="$(compare_shared_dev_path)"
+    $SSH_CMD "ec2-user@$ip" "[[ -e $dev ]]" 2>/dev/null && return 0
     for i in "${!COMPARE_PUB_IPS[@]}"; do
         [[ "${COMPARE_PUB_IPS[$i]}" == "$ip" ]] && break
     done
     inst=$(state_get compute_instance_ids | jq -r ".[$i]")
     [[ -n "$inst" && "$inst" != "null" ]] || die "compare_reattach_volume_if_missing: no instance id for $ip"
     log "  $ip ($inst) has lost its device (fenced), reattaching $COMPARE_VOL_ID..."
-    aws ec2 attach-volume --volume-id "$COMPARE_VOL_ID" --instance-id "$inst" --device /dev/sdf >/dev/null 2>&1 || true
-    aws ec2 wait volume-in-use --volume-ids "$COMPARE_VOL_ID" 2>/dev/null || true
+    aws ec2 attach-volume --volume-id "$COMPARE_VOL_ID" --instance-id "$inst" --device /dev/sdf >/dev/null || true
     local n
-    for n in 1 2 3 4 5 6 7 8 9 10; do
-        $SSH_CMD "ec2-user@$ip" "[[ -e /dev/nvme1n1 ]]" 2>/dev/null && return 0
+    for n in $(seq 60); do
+        $SSH_CMD "ec2-user@$ip" "[[ -e $dev ]]" 2>/dev/null && return 0
         sleep 2
     done
     die "compare_reattach_volume_if_missing: device still missing on $ip after reattach"

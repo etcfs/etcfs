@@ -77,7 +77,7 @@ scale_launch() {
 scale_attach() {
     aws ec2 attach-volume --volume-id "$COMPARE_VOL_ID" --instance-id "$SCALE_INST" --device /dev/sdf >/dev/null
     $SSH_CMD "ec2-user@$SCALE_PUB" "deadline=\$((\$(date +%s) + 120));
-        until [ -e /dev/nvme1n1 ] || [ -e /dev/xvdf ]; do [ \$(date +%s) -lt \$deadline ] || exit 1; sleep 0.05; done" \
+        until [ -e $(compare_shared_dev_path) ]; do [ \$(date +%s) -lt \$deadline ] || exit 1; sleep 0.05; done" \
         || die "scale: the shared volume never appeared on $SCALE_PUB"
 }
 
@@ -176,7 +176,7 @@ scale_add_etcfs() {
         < <($SSH_CMD "ec2-user@$seed" "$ETCDCTL member list" | awk -F', ' '{print $5}' | sed -E 's#http://([0-9.]+):2379#\1#')
     scale_remote meta_start "$SCALE_PUB" "sudo nohup /usr/local/bin/etcfuse-meta --listen=/run/etcfuse/etcfuse.sock \
         --etcd-endpoints=$endpoints --node-id=$SCALE_NODE_ID --cluster-name=$cluster \
-        --lease-ttl=${ETCFS_LEASE_TTL:-10s} --block-device=/dev/nvme1n1 --log-level=1 \
+        --lease-ttl=${ETCFS_LEASE_TTL:-10s} --block-device=$(compare_shared_dev_path) --log-level=1 \
         --ebs-volume-id=$COMPARE_VOL_ID --ec2-instance-id=$SCALE_INST > /tmp/meta.log 2>&1 &" \
         "sudo test -S /run/etcfuse/etcfuse.sock" 60 >/dev/null
 
