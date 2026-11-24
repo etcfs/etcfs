@@ -107,9 +107,32 @@ open-descriptor count first, not measuring again.
 ## For the thesis defence
 
 Gaps an examiner can point at. The elasticity argument currently rests on
-mechanism (Corosync's sync barrier, journals, the node list) more than on
-measurement: a single planned join or leave costs GFS2 only 0.02–0.22 s, and
-everything beyond that is untested.
+mechanism (journals, the node list, DLM recovery) more than on measurement:
+a single planned join or leave costs GFS2 only 0.02–0.22 s, and everything
+beyond that is untested.
+
+What the DLM does on a membership change, from the sources in the thesis's
+`references/` (`dlm-4.3.0-dlm_controld-cpg.c`, `linux-dlm-6.18.54/`):
+
+- `dlm_controld` stops the kernel lockspace on every CPG configuration change
+  (`confchg_cb` → `stop_kernel`), waits for ring id, quorum, fencing of failed
+  nodes and fs-done, then for a start message from every member, and only then
+  restarts it. Changes queued while it waits are folded into the one that
+  starts (`cleanup_changes`). This is the DLM's own protocol on CPG, not
+  Corosync's `sync_*` barrier.
+- The kernel then runs `ls_recover`. The directory node of a resource is
+  `hash % total_weight` over the member array (`dlm_hash2nodeid`), so every
+  join or leave remaps it, and every node rebuilds its share by asking every
+  other member for master names (`dlm_recover_directory`): about N×(N−1)
+  request rounds, with data proportional to active resources. If any node
+  left, clean leaves included (`node->gone` counts as `neg`), it also purges,
+  remasters and resends locks. Barriers separate each step.
+- A change that arrives during kernel recovery interrupts it
+  (`dlm_recovery_stopped` → `-EINTR`) and the work is redone for the new
+  change.
+- The kernel logs each recovery as `dlm_recover <seq> generation <n> done:
+  <ms> ms`. Collect it from `dmesg` on every node in every churn benchmark
+  below, together with the active-lock count, alongside the survivors' stall.
 
 ### Membership churn: new benchmarks
 
@@ -118,11 +141,15 @@ everything beyond that is untested.
       `dlm_tool ls` every 100 ms). The `new change` parsing of `dlm_tool ls` is
       unverified until the first run's `dlm-*.log` is read.
 - [ ] **Churn rate sweep.** Script ready, not yet run: `bench-churn.sh` with
-      `ETCFS_CHURN_INTERVAL` at 60, 30, 10, 5 and 2 s. The hypothesis: when a new change lands
-      inside the previous one's synchronisation, Corosync aborts and restarts
-      it (`sync_abort`), and GFS2's stall grows superlinearly. EtcFS should stay
-      flat. This is the measurement that turns the autoscaling argument from
-      mechanism into evidence.
+      `ETCFS_CHURN_INTERVAL` at 60, 30, 10, 5 and 2 s. Two effects pull in
+      opposite directions: `dlm_controld` folds queued changes into one
+      restart, which bounds the number of stalls, while a change landing
+      inside kernel recovery aborts it with `-EINTR`, which repeats the
+      directory rebuild. Which one dominates is what the sweep measures: per
+      change, the survivors' stall and the `dlm_recover ... done` times,
+      including interrupted recoveries. EtcFS should stay flat. This is the
+      measurement that turns the autoscaling argument from mechanism into
+      evidence.
 - [ ] **Overlapping changes.** Script ready, not yet run: `bench-overlap.sh`
       (four nodes) on both backends.
 - [ ] **Stall versus cluster size.** Run `ETCFS_ELASTIC_NODES=N
@@ -130,7 +157,11 @@ everything beyond that is untested.
       three nodes only.
       Repeat the planned join/leave at 3, 6, 10 and 16 nodes (16 is the
       Multi-Attach limit and Red Hat's supported maximum for GFS2) to see
-      whether the lockspace suspension grows with N.
+      whether the lockspace suspension grows with N. The directory rebuild is
+      about N×(N−1) request rounds, so record `dlm_recover ... done` times and
+      run each N with a small and a large number of active locks (for example
+      100 and 100,000 open files), since rebuild data scales with resources,
+      not with what the departing node held.
 - [ ] **Time the full GFS2 add path.** Script ready, not yet run:
       `ETCFS_JADD_FULL=1 bench-gfs2-journal-add.sh`. `sec:eval:jadd` notes that
       adding a node not yet in Corosync's node list was not timed. Measure the whole sequence
@@ -138,8 +169,8 @@ everything beyond that is untested.
       `corosync-cfgtool -R`, `gfs2_jadd`, mount, first write. Report the
       survivors' stall during the reload as well.
 - [ ] **Autoscaling end to end.** Script ready, not yet run:
-      `scripts/bench/bench-autoscale.sh` (AWS CLI only, etcfs; GFS2 has no ASG
-      equivalent, see its header). Nothing measures the Auto Scaling path yet. For
+      `bench-scale-cycle.sh` (add-compute-node.sh out, remove_node's steps in,
+      etcfs only). Nothing measures the scale path yet. For
       scale-out: time from the ASG desired-count change to the instance's first
       successful write, split into instance launch, etcd member add, daemon
       start, arena claim. For scale-in: time to `member remove` and arena
