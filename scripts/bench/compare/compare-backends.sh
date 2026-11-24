@@ -838,6 +838,10 @@ compare_reattach_volume_if_missing() {
     # stable, and on some nodes the shared volume comes up as another name.
     dev="$(compare_shared_dev_path)"
     $SSH_CMD "ec2-user@$ip" "[[ -e $dev ]]" 2>/dev/null && return 0
+    # An attachment that lands while the instance is still booting can miss
+    # the NVMe hot-plug event: EC2 reports it attached, the guest has no
+    # device. A PCI rescan picks it up.
+    $SSH_CMD "ec2-user@$ip" "echo 1 | sudo tee /sys/bus/pci/rescan >/dev/null; sudo udevadm settle; [[ -e $dev ]]" 2>/dev/null && return 0
     for i in "${!COMPARE_PUB_IPS[@]}"; do
         [[ "${COMPARE_PUB_IPS[$i]}" == "$ip" ]] && break
     done
