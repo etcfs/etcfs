@@ -342,6 +342,10 @@ compare_mount_gfs2() {
     done
     sleep 5
 
+    # Provisioning's attachment does not always land on every node in time;
+    # one that has not fails its mount (and, for a node held back as a joiner,
+    # later fails the join) for a reason that has nothing to do with GFS2.
+    for ip in "${COMPARE_PUB_IPS[@]}"; do compare_reattach_volume_if_missing "$ip"; done
     dev=$(compare_shared_device "${COMPARE_PUB_IPS[0]}")
     # One journal per node by default. COMPARE_GFS2_JOURNALS formats fewer, so
     # the nodes past that count stay unmounted for bench-gfs2-journal-add.sh.
