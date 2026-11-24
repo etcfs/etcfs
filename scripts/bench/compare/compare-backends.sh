@@ -884,7 +884,8 @@ compare_etcfs_start() {
         deadline=\$((\$(date +%s) + 120))
         until sudo mountpoint -q $FUSE_MOUNTPOINT && \
               sudo dd if=/dev/zero of=$FUSE_MOUNTPOINT/join-probe.\$\$ bs=4k count=1 >/dev/null 2>&1; do
-            [[ \$(date +%s) -lt \$deadline ]] || { echo 'compare_etcfs_start: mount never came up within 120s' >&2; exit 1; }
+            [[ \$(date +%s) -lt \$deadline ]] || { echo 'compare_etcfs_start: mount never came up within 120s' >&2
+                sudo tail -n 30 /tmp/meta.log /tmp/fuse.log >&2; pgrep -a etcfuse >&2; exit 1; }
             sleep 0.05
         done
         sudo rm -f $FUSE_MOUNTPOINT/join-probe.* 2>/dev/null
