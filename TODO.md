@@ -169,8 +169,8 @@ What the DLM does on a membership change, from the sources in the thesis's
       `corosync-cfgtool -R`, `gfs2_jadd`, mount, first write. Report the
       survivors' stall during the reload as well.
 - [ ] **Autoscaling end to end.** Script ready, not yet run:
-      `bench-scale-cycle.sh` (add-compute-node.sh out, remove_node's steps in,
-      etcfs only). Nothing measures the scale path yet. For
+      `bench-scale-cycle.sh` on etcfs and gfs2 (steps in `compare-scale.sh`).
+      Nothing measures the scale path yet. For
       scale-out: time from the ASG desired-count change to the instance's first
       successful write, split into instance launch, etcd member add, daemon
       start, arena claim. For scale-in: time to `member remove` and arena

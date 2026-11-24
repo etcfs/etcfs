@@ -265,9 +265,12 @@ compare_mount_nfs_ha() {
     done
 }
 
-# compare_gfs2_corosync_conf <n> — corosync.conf naming the first n nodes.
+# compare_gfs2_corosync_conf <priv_ip>... — corosync.conf naming those nodes.
+# A node's id is derived from its address, not its position in the list, so it
+# stays the same across a reload that adds or drops another node — corosync
+# treats a changed id as a different node.
 compare_gfs2_corosync_conf() {
-    local n="$1" i
+    local ip
     cat <<EOF
 totem {
     version: 2
@@ -277,7 +280,7 @@ totem {
     crypto_cipher: none
 }
 nodelist {
-$(for i in $(seq 0 $((n - 1))); do printf '    node {\n        ring0_addr: %s\n        nodeid: %d\n    }\n' "${COMPARE_PRIV_IPS[$i]}" "$((i+1))"; done)
+$(for ip in "$@"; do printf '    node {\n        ring0_addr: %s\n        nodeid: %d\n    }\n' "$ip" "$(compare_gfs2_nodeid "$ip")"; done)
 }
 quorum {
     provider: corosync_votequorum
@@ -286,6 +289,14 @@ logging {
     to_syslog: yes
 }
 EOF
+}
+
+# compare_gfs2_nodeid <priv_ip> — the last two octets, plus one so it is never 0.
+compare_gfs2_nodeid() {
+    local IFS=.
+    # shellcheck disable=SC2086
+    set -- $1
+    echo $(( $3 * 256 + $4 + 1 ))
 }
 
 # compare_mount_gfs2 brings up the bare corosync + dlm stack every GFS2 run
@@ -313,7 +324,7 @@ compare_mount_gfs2() {
     # not yet in the nodelist. Only the members get the stack started.
     local members="${COMPARE_GFS2_MEMBERS:-${#COMPARE_PUB_IPS[@]}}"
     local conf
-    conf=$(compare_gfs2_corosync_conf "$members")
+    conf=$(compare_gfs2_corosync_conf "${COMPARE_PRIV_IPS[@]:0:$members}")
     for ip in "${COMPARE_PUB_IPS[@]:0:$members}"; do
         $SSH_CMD "ec2-user@$ip" "sudo mkdir -p /etc/corosync"
         echo "$conf" | $SSH_CMD "ec2-user@$ip" "sudo tee /etc/corosync/corosync.conf >/dev/null"

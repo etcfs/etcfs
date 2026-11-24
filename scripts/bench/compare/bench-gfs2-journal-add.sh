@@ -82,7 +82,7 @@ sleep 3
 T0=$(compare_epoch)
 if [[ "$FULL" == 1 ]]; then
     log "adding $JOINER to corosync at $T0"
-    conf=$(compare_gfs2_corosync_conf "$NODES")
+    conf=$(compare_gfs2_corosync_conf "${COMPARE_PRIV_IPS[@]}")
     for ip in "${BENCH_NODES[@]}"; do
         echo "$conf" | $SSH_CMD "ec2-user@$ip" "sudo mkdir -p /etc/corosync && sudo tee /etc/corosync/corosync.conf >/dev/null"
     done
