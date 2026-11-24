@@ -792,8 +792,10 @@ compare_gfs2_recoveries() {
 # compare_gfs2_lock_count <pub_ip> — glocks this node holds in its cache, each
 # one a DLM resource the directory rebuild has to account for.
 compare_gfs2_lock_count() {
-    $SSH_CMD "ec2-user@$1" "mountpoint -q /sys/kernel/debug || sudo mount -t debugfs none /sys/kernel/debug;
-        sudo cat /sys/kernel/debug/gfs2/*/glocks 2>/dev/null | grep -c '^G:'" || echo -1
+    # The glob has to expand as root: /sys/kernel/debug is not readable by the
+    # login user, so expanding it there leaves it literal and counts nothing.
+    $SSH_CMD "ec2-user@$1" "sudo sh -c 'mountpoint -q /sys/kernel/debug || mount -t debugfs none /sys/kernel/debug;
+        cat /sys/kernel/debug/gfs2/*/glocks | grep -c ^G: || true'" || echo -1
 }
 
 # compare_populate_locks <count> <pub_ip>... — create <count> files once, then
