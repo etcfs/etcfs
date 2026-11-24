@@ -51,7 +51,7 @@ scale_remote() {
         echo \"@step \$(awk -v s=\$s -v e=\$(date +%s.%N) 'BEGIN{printf \"%.3f\", e-s}')\"") \
         || die "scale: step $step failed on $ip (command: $cmd; until: $cond)"
     scale_record "$step" "$(echo "$out" | awk '$1 == "@step" {print $2}')"
-    echo "$out" | grep -v '^@step '
+    echo "$out" | grep -v '^@step ' || true
 }
 
 # scale_report <scenario> <prefix> <total_seconds> — one headline per step.

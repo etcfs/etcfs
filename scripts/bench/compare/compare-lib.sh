@@ -137,10 +137,16 @@ compare_take_run_lock() {
 # a watcher). They inherit the run lock's descriptor, so one left running after
 # a failure holds the lock and refuses the next run.
 compare_kill_jobs() {
-    local pids
-    pids=$(jobs -p)
-    # shellcheck disable=SC2086
-    [[ -z "$pids" ]] || kill $pids 2>/dev/null || true
+    local pid
+    for pid in $(jobs -p); do compare_kill_tree "$pid"; done
+}
+
+# compare_kill_tree <pid> — the process and everything below it, children
+# first: a job's own subshells hold the descriptor too.
+compare_kill_tree() {
+    local child
+    for child in $(pgrep -P "$1" 2>/dev/null); do compare_kill_tree "$child"; done
+    kill "$1" 2>/dev/null || true
 }
 
 compare_begin() {
