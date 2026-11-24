@@ -93,7 +93,7 @@ sleep 5
 EVENTS="$RESULTS_DIR/churn-events.log"
 : > "$EVENTS"
 pace() {  # sleep out the rest of INTERVAL since $1, if any is left
-    awk -v s="$1" -v i="$INTERVAL" -v n="$(compare_epoch)" 'BEGIN{d=s+i-n; printf "%.3f", d>0?d:0}'
+    awk -v s="$1" -v i="$INTERVAL" -v n="$(compare_epoch)" 'BEGIN{d=s+i-n; printf "%.3f", (d > 0 ? d : 0)}'
 }
 [[ "$COMPARE_BACKEND_BASE" == gfs2 ]] && compare_gfs2_dmesg_mark "${SURVIVORS[@]}"
 T_START=$(compare_epoch)
