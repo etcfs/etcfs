@@ -104,6 +104,66 @@ open-descriptor count first, not measuring again.
       control on the gp3 root volume against io2 for EtcFS. Candidates beyond
       git: SQLite, a build cache, a Prometheus TSDB.
 
+## For the thesis defence
+
+Gaps an examiner can point at. The elasticity argument currently rests on
+mechanism (Corosync's sync barrier, journals, the node list) more than on
+measurement: a single planned join or leave costs GFS2 only 0.02–0.22 s, and
+everything beyond that is untested.
+
+### Membership churn: new benchmarks
+
+- [ ] **Repeated leave/rejoin on GFS2.** `bench-rejoin-load.sh` is
+      etcfs-only, so the six-cycle result (survivors lost 0.00%) has no GFS2
+      row. Port it using `compare_leave_fs`/`compare_join_fs` from
+      `bench-elasticity.sh`, and record per cycle: the survivors' worst stall,
+      bandwidth lost, and the DLM lockspace state over time
+      (`dlm_tool ls` polled every 100 ms).
+- [ ] **Churn rate sweep.** Same scenario with the interval between membership
+      changes at 60, 30, 10, 5 and 2 s. The hypothesis: when a new change lands
+      inside the previous one's synchronisation, Corosync aborts and restarts
+      it (`sync_abort`), and GFS2's stall grows superlinearly. EtcFS should stay
+      flat. This is the measurement that turns the autoscaling argument from
+      mechanism into evidence.
+- [ ] **Overlapping changes.** Two nodes joining in the same second, and one
+      joining while another leaves, on both backends.
+- [ ] **Stall versus cluster size.** The elasticity table is three nodes only.
+      Repeat the planned join/leave at 3, 6, 10 and 16 nodes (16 is the
+      Multi-Attach limit and Red Hat's supported maximum for GFS2) to see
+      whether the lockspace suspension grows with N.
+- [ ] **Time the full GFS2 add path.** `sec:eval:jadd` notes that adding a node
+      not yet in Corosync's node list was not timed. Measure the whole sequence
+      an operator runs: edit `corosync.conf` on every member,
+      `corosync-cfgtool -R`, `gfs2_jadd`, mount, first write. Report the
+      survivors' stall during the reload as well.
+- [ ] **Autoscaling end to end.** Nothing measures the Auto Scaling path. For
+      scale-out: time from the ASG desired-count change to the instance's first
+      successful write, split into instance launch, etcd member add, daemon
+      start, arena claim. For scale-in: time to `member remove` and arena
+      reclaim, and the survivors' stall throughout. A GFS2 equivalent needs the
+      journal and node-list steps scripted into a launch hook; if that is
+      impractical, say so rather than leave the row empty.
+
+### Missing measurements behind slide claims
+
+- [ ] **More runs on the headline numbers.** The kill timeline (8 EtcFS runs,
+      4 GFS2) and the elasticity table (single 30 s aggregates) are thin for
+      the two results the talk leans on. Aim for at least 5 runs each with
+      ranges.
+- [ ] **EFS close-to-open staleness.** The "why not EFS" slide relies on RFC
+      7530 §10.3.1 only. A two-node test that keeps a file open on both, writes
+      on one and reads on the other without reopening, run on EFS and on
+      EtcFS, would show the difference directly. Read the EFS documentation on
+      consistency first, so the result is compared with what AWS promises.
+- [ ] **Cross-node `fcntl` on EFS against EtcFS.** One script showing that a
+      lock taken on node A blocks node B on EFS and does not on EtcFS. It backs
+      the out-of-scope line with a measurement instead of a statement.
+- [ ] **GFS2 large-file reads.** The 8 GiB handoff and the concurrent-write
+      rows of the alternatives table say "not measured here" for GFS2. Run
+      `bench-handoff.sh` and `bench-seq-throughput.sh` against GFS2 on the same
+      `m7i.large`/8000-IOPS setup so the direct-path comparison includes the
+      incumbent.
+
 
 # Big Extensions or Impactful changes
 

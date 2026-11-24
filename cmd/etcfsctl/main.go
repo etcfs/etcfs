@@ -4,7 +4,7 @@ Package main is etcfsctl, the EtcFS operator CLI.
 fsck and filesystem info exist today only as flags on the daemon binary
 (etcfuse-meta --fsck, --info), so diagnosing a filesystem means running the
 thing that mounts it with a special flag. etcfsctl is a front door onto the
-same underlying packages (pkg/fsck, pkg/fsinfo, pkg/membership, pkg/arena,
+same underlying packages (pkg/fsck, pkg/fsinfo, pkg/arena,
 pkg/fencing) with no daemon involved.
 
 Usage:
