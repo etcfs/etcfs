@@ -133,6 +133,16 @@ compare_take_run_lock() {
     printf '%s pid=%s started=%s\n' "$COMPARE_BACKEND" "$$" "$(date -Is)" >&"$COMPARE_LOCK_FD"
 }
 
+# compare_kill_jobs — stop this script's background jobs (a backgrounded load,
+# a watcher). They inherit the run lock's descriptor, so one left running after
+# a failure holds the lock and refuses the next run.
+compare_kill_jobs() {
+    local pids
+    pids=$(jobs -p)
+    # shellcheck disable=SC2086
+    [[ -z "$pids" ]] || kill $pids 2>/dev/null || true
+}
+
 compare_begin() {
     local extra="${1:-}"
     # gluster always leaves per-node local volumes behind, whichever scenario
@@ -143,10 +153,13 @@ compare_begin() {
         # Expanded now on purpose: extra is the caller's literal command, and
         # the local holding it is gone by the time the trap fires.
         # shellcheck disable=SC2064
-        trap "$extra; compare_destroy" EXIT
+        trap "compare_kill_jobs; $extra; compare_destroy" EXIT
     else
-        trap "compare_destroy" EXIT
+        trap "compare_kill_jobs; compare_destroy" EXIT
     fi
+    # A scenario that dies under set -e otherwise exits without saying where.
+    set -E
+    trap 'log "FAILED: line $LINENO: $BASH_COMMAND"' ERR
     compare_provision
 }
 

@@ -69,8 +69,16 @@ SCALE_INST="" SCALE_PUB="" SCALE_PRIV=""
 scale_launch() {
     scale_local launch scale_run_instance
     scale_local ssh wait_for_ssh "$SCALE_PUB" 60 2
+    # From the API call until the device shows up, so timed from here: the
+    # attachment starts before any SSH call could.
+    scale_local attach scale_attach
+}
+
+scale_attach() {
     aws ec2 attach-volume --volume-id "$COMPARE_VOL_ID" --instance-id "$SCALE_INST" --device /dev/sdf >/dev/null
-    scale_remote attach "$SCALE_PUB" true "[ -e /dev/nvme1n1 ] || [ -e /dev/xvdf ]" >/dev/null
+    $SSH_CMD "ec2-user@$SCALE_PUB" "deadline=\$((\$(date +%s) + 120));
+        until [ -e /dev/nvme1n1 ] || [ -e /dev/xvdf ]; do [ \$(date +%s) -lt \$deadline ] || exit 1; sleep 0.05; done" \
+        || die "scale: the shared volume never appeared on $SCALE_PUB"
 }
 
 scale_run_instance() {
@@ -182,9 +190,11 @@ scale_add_etcfs() {
 }
 
 scale_etcfs_install() {
-    $SSH_CMD "ec2-user@$SCALE_PUB" "sudo dnf install -y fuse3-libs >/dev/null 2>&1; sudo mkdir -p /mnt/etcfuse /run/etcfuse /var/lib/etcd /var/lib/etcd-wal"
-    scp $SSH_OPTS -q "$SCALE_BIN_DIR"/* "ec2-user@$SCALE_PUB:/tmp/"
-    $SSH_CMD "ec2-user@$SCALE_PUB" "sudo install -m 0755 /tmp/etcfuse /tmp/etcfuse-meta /tmp/etcd /tmp/etcdctl /usr/local/bin/"
+    $SSH_CMD "ec2-user@$SCALE_PUB" "sudo dnf install -y fuse3-libs 2>&1 | tail -2; sudo mkdir -p /mnt/etcfuse /run/etcfuse /var/lib/etcd /var/lib/etcd-wal" \
+        || die "scale: package install failed on $SCALE_PUB"
+    scp $SSH_OPTS "$SCALE_BIN_DIR"/* "ec2-user@$SCALE_PUB:/tmp/" || die "scale: copying binaries to $SCALE_PUB failed"
+    $SSH_CMD "ec2-user@$SCALE_PUB" "sudo install -m 0755 /tmp/etcfuse /tmp/etcfuse-meta /tmp/etcd /tmp/etcdctl /usr/local/bin/" \
+        || die "scale: installing binaries on $SCALE_PUB failed"
 }
 
 scale_remove_etcfs() {
