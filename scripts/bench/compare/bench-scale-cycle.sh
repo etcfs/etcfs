@@ -117,5 +117,5 @@ for c in $(seq 1 "$CYCLES"); do
 done
 
 compare_probe_stop "$PROBE_NODE"
-for ip in "${BASE[@]}"; do $SSH_CMD "ec2-user@$ip" "sudo pkill fio" >/dev/null 2>&1 || true; done
+for ip in "${BASE[@]}"; do $SSH_CMD "ec2-user@$ip" "sudo pkill -INT fio" >/dev/null 2>&1 || true; done
 wait "$load_pid" || true
