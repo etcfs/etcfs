@@ -135,14 +135,12 @@ What the DLM does on a membership change, from the sources in the thesis's
   below, together with the active-lock count, alongside the survivors' stall.
   Collected by `compare_gfs2_recoveries` in churn, overlap, elasticity,
   journal-add and scale-cycle (finished, slowest, sum, started); the format is
-  checked against the 6.18 sources but not yet against AL2's kernel.
+  checked against the 6.18 sources and confirmed on AL2's kernel.
 
 ### Membership churn: new benchmarks
 
-- [ ] **Repeated leave/rejoin on GFS2.** Script ready, not yet run:
-      `COMPARE_BACKEND=gfs2 bench-churn.sh` (per-cycle stall, bandwidth lost,
-      `dlm_tool ls` every 100 ms). The `new change` parsing of `dlm_tool ls` is
-      unverified until the first run's `dlm-*.log` is read.
+- [ ] **Repeated leave/rejoin on GFS2.** Script ready and smoke-tested, not
+      yet run at full length: `COMPARE_BACKEND=gfs2 bench-churn.sh`.
 - [ ] **Churn rate sweep.** Script ready, not yet run: `bench-churn.sh` with
       `ETCFS_CHURN_INTERVAL` at 60, 30, 10, 5 and 2 s. Two effects pull in
       opposite directions: `dlm_controld` folds queued changes into one
