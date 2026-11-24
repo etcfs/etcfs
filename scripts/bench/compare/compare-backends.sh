@@ -265,6 +265,29 @@ compare_mount_nfs_ha() {
     done
 }
 
+# compare_gfs2_corosync_conf <n> — corosync.conf naming the first n nodes.
+compare_gfs2_corosync_conf() {
+    local n="$1" i
+    cat <<EOF
+totem {
+    version: 2
+    cluster_name: comparegfs2
+    transport: udpu
+    crypto_hash: none
+    crypto_cipher: none
+}
+nodelist {
+$(for i in $(seq 0 $((n - 1))); do printf '    node {\n        ring0_addr: %s\n        nodeid: %d\n    }\n' "${COMPARE_PRIV_IPS[$i]}" "$((i+1))"; done)
+}
+quorum {
+    provider: corosync_votequorum
+}
+logging {
+    to_syslog: yes
+}
+EOF
+}
+
 # compare_mount_gfs2 brings up the bare corosync + dlm stack every GFS2 run
 # has used: no cluster resource manager, and so no fencing. That is honest for
 # throughput scenarios and wrong for the node-kill one, where a survivor's
@@ -285,25 +308,13 @@ compare_mount_gfs2() {
         $SSH_CMD "ec2-user@$ip" "set -e; sudo yum install -y corosync dlm gfs2-utils"
     done
 
-    local conf="
-totem {
-    version: 2
-    cluster_name: comparegfs2
-    transport: udpu
-    crypto_hash: none
-    crypto_cipher: none
-}
-nodelist {
-$(for i in "${!COMPARE_PRIV_IPS[@]}"; do printf '    node {\n        ring0_addr: %s\n        nodeid: %d\n    }\n' "${COMPARE_PRIV_IPS[$i]}" "$((i+1))"; done)
-}
-quorum {
-    provider: corosync_votequorum
-}
-logging {
-    to_syslog: yes
-}
-"
-    for ip in "${COMPARE_PUB_IPS[@]}"; do
+    # COMPARE_GFS2_MEMBERS leaves the nodes past that count out of corosync
+    # entirely, so bench-gfs2-journal-add.sh can time admitting a node that is
+    # not yet in the nodelist. Only the members get the stack started.
+    local members="${COMPARE_GFS2_MEMBERS:-${#COMPARE_PUB_IPS[@]}}"
+    local conf
+    conf=$(compare_gfs2_corosync_conf "$members")
+    for ip in "${COMPARE_PUB_IPS[@]:0:$members}"; do
         $SSH_CMD "ec2-user@$ip" "sudo mkdir -p /etc/corosync"
         echo "$conf" | $SSH_CMD "ec2-user@$ip" "sudo tee /etc/corosync/corosync.conf >/dev/null"
         $SSH_CMD "ec2-user@$ip" "sudo systemctl enable --now corosync"
@@ -315,7 +326,7 @@ logging {
             "sudo corosync-quorumtool -s 2>/dev/null | grep -q 'Quorate:.*Yes'" && break
         sleep 2
     done
-    for ip in "${COMPARE_PUB_IPS[@]}"; do
+    for ip in "${COMPARE_PUB_IPS[@]:0:$members}"; do
         $SSH_CMD "ec2-user@$ip" "sudo systemctl enable --now dlm"
     done
     sleep 5

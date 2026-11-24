@@ -113,26 +113,27 @@ everything beyond that is untested.
 
 ### Membership churn: new benchmarks
 
-- [ ] **Repeated leave/rejoin on GFS2.** `bench-rejoin-load.sh` is
-      etcfs-only, so the six-cycle result (survivors lost 0.00%) has no GFS2
-      row. Port it using `compare_leave_fs`/`compare_join_fs` from
-      `bench-elasticity.sh`, and record per cycle: the survivors' worst stall,
-      bandwidth lost, and the DLM lockspace state over time
-      (`dlm_tool ls` polled every 100 ms).
-- [ ] **Churn rate sweep.** Same scenario with the interval between membership
-      changes at 60, 30, 10, 5 and 2 s. The hypothesis: when a new change lands
+- [ ] **Repeated leave/rejoin on GFS2.** Script ready, not yet run:
+      `COMPARE_BACKEND=gfs2 bench-churn.sh` (per-cycle stall, bandwidth lost,
+      `dlm_tool ls` every 100 ms). The `new change` parsing of `dlm_tool ls` is
+      unverified until the first run's `dlm-*.log` is read.
+- [ ] **Churn rate sweep.** Script ready, not yet run: `bench-churn.sh` with
+      `ETCFS_CHURN_INTERVAL` at 60, 30, 10, 5 and 2 s. The hypothesis: when a new change lands
       inside the previous one's synchronisation, Corosync aborts and restarts
       it (`sync_abort`), and GFS2's stall grows superlinearly. EtcFS should stay
       flat. This is the measurement that turns the autoscaling argument from
       mechanism into evidence.
-- [ ] **Overlapping changes.** Two nodes joining in the same second, and one
-      joining while another leaves, on both backends.
-- [ ] **Stall versus cluster size.** The elasticity table is three nodes only.
+- [ ] **Overlapping changes.** Script ready, not yet run: `bench-overlap.sh`
+      (four nodes) on both backends.
+- [ ] **Stall versus cluster size.** Run `ETCFS_ELASTIC_NODES=N
+      bench-repeat.sh 5 bench-elasticity.sh` per N. The elasticity table is
+      three nodes only.
       Repeat the planned join/leave at 3, 6, 10 and 16 nodes (16 is the
       Multi-Attach limit and Red Hat's supported maximum for GFS2) to see
       whether the lockspace suspension grows with N.
-- [ ] **Time the full GFS2 add path.** `sec:eval:jadd` notes that adding a node
-      not yet in Corosync's node list was not timed. Measure the whole sequence
+- [ ] **Time the full GFS2 add path.** Script ready, not yet run:
+      `ETCFS_JADD_FULL=1 bench-gfs2-journal-add.sh`. `sec:eval:jadd` notes that
+      adding a node not yet in Corosync's node list was not timed. Measure the whole sequence
       an operator runs: edit `corosync.conf` on every member,
       `corosync-cfgtool -R`, `gfs2_jadd`, mount, first write. Report the
       survivors' stall during the reload as well.
@@ -146,11 +147,14 @@ everything beyond that is untested.
 
 ### Missing measurements behind slide claims
 
-- [ ] **More runs on the headline numbers.** The kill timeline (8 EtcFS runs,
+- [ ] **More runs on the headline numbers.** `bench-repeat.sh <runs>
+      <script>` gives min/median/max per metric. The kill timeline (8 EtcFS runs,
       4 GFS2) and the elasticity table (single 30 s aggregates) are thin for
       the two results the talk leans on. Aim for at least 5 runs each with
       ranges.
-- [ ] **EFS close-to-open staleness.** The "why not EFS" slide relies on RFC
+- [ ] **EFS close-to-open staleness.** Script ready, not yet run:
+      `bench-coherence.sh` on `efs` and `etcfs`, which covers the `fcntl` item
+      below too. The "why not EFS" slide relies on RFC
       7530 §10.3.1 only. A two-node test that keeps a file open on both, writes
       on one and reads on the other without reopening, run on EFS and on
       EtcFS, would show the difference directly. Read the EFS documentation on
@@ -158,7 +162,8 @@ everything beyond that is untested.
 - [ ] **Cross-node `fcntl` on EFS against EtcFS.** One script showing that a
       lock taken on node A blocks node B on EFS and does not on EtcFS. It backs
       the out-of-scope line with a measurement instead of a statement.
-- [ ] **GFS2 large-file reads.** The 8 GiB handoff and the concurrent-write
+- [ ] **GFS2 large-file reads.** Both scripts already accept
+      `COMPARE_BACKEND=gfs2`; this needs only running. The 8 GiB handoff and the concurrent-write
       rows of the alternatives table say "not measured here" for GFS2. Run
       `bench-handoff.sh` and `bench-seq-throughput.sh` against GFS2 on the same
       `m7i.large`/8000-IOPS setup so the direct-path comparison includes the
