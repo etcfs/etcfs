@@ -137,7 +137,9 @@ everything beyond that is untested.
       an operator runs: edit `corosync.conf` on every member,
       `corosync-cfgtool -R`, `gfs2_jadd`, mount, first write. Report the
       survivors' stall during the reload as well.
-- [ ] **Autoscaling end to end.** Nothing measures the Auto Scaling path. For
+- [ ] **Autoscaling end to end.** Script ready, not yet run:
+      `scripts/bench/bench-autoscale.sh` (AWS CLI only, etcfs; GFS2 has no ASG
+      equivalent, see its header). Nothing measures the Auto Scaling path yet. For
       scale-out: time from the ASG desired-count change to the instance's first
       successful write, split into instance launch, etcd member add, daemon
       start, arena claim. For scale-in: time to `member remove` and arena
