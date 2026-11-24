@@ -717,7 +717,10 @@ compare_leave_fs() {
             # real and turns the rejoin below into a fencing-recovery test.
             compare_etcfs_snapshot_cmdline "$ip"
             $SSH_CMD "ec2-user@$ip" \
-                "sudo killall etcfuse-meta etcfuse 2>/dev/null; sudo umount -l $MOUNT_PATH 2>/dev/null; true"
+                "sudo killall etcfuse-meta etcfuse 2>/dev/null; sudo umount -l $MOUNT_PATH 2>/dev/null
+                 # A rejoin started while the old daemon is still releasing its
+                 # arenas races its exit, which unlinks the new daemon's socket.
+                 for _ in \$(seq 600); do pgrep -x etcfuse-meta >/dev/null || break; sleep 0.1; done; true"
             ;;
         juicefs)
             $SSH_CMD "ec2-user@$ip" "sudo umount $MOUNT_PATH 2>/dev/null || sudo umount -l $MOUNT_PATH 2>/dev/null; true"
