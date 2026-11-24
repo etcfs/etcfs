@@ -79,6 +79,7 @@ compare_parallel_fio "jadd-during" "$RUNTIME" "$LOAD_JOB" "${SURVIVORS[@]}" >/de
 load_pid=$!
 sleep 3
 
+compare_gfs2_dmesg_mark "${SURVIVORS[@]}"
 T0=$(compare_epoch)
 if [[ "$FULL" == 1 ]]; then
     log "adding $JOINER to corosync at $T0"
@@ -120,6 +121,7 @@ during=$(jq -s 'map(.jobs[0].write.bw // 0) | (add // 0) / 1024 | . * 100 | roun
 read -r _ stall errs < <(compare_probe_recovery "$PROBE_NODE" "$T0")
 impact=$(awk -v b="$baseline" -v d="$during" 'BEGIN{ if (b+0 == 0) print "0"; else printf "%.2f", (b-d)/b*100 }')
 
+compare_gfs2_recoveries "$SCENARIO" "${SURVIVORS[@]}"
 compare_headline "$SCENARIO" jadd_s "$jadd_s" s
 compare_headline "$SCENARIO" mount_after_jadd_s "$mount_s" s
 if [[ "$FULL" == 1 ]]; then

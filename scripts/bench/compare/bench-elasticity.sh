@@ -25,6 +25,11 @@
 # file would let a backend look elastic by never having to transfer anything.
 #
 # ETCFS_ELASTIC_RUNTIME (default 30) is the seconds of load per phase.
+# ETCFS_ELASTIC_LOCKS (default 0) creates that many files before the event and
+# stats them from every survivor, so each holds a cached lock on all of them —
+# the active-resource count GFS2's directory rebuild scales with. On gfs2 the
+# kernel's dlm_recover times are collected from the survivors for each phase.
+#
 # ETCFS_ELASTIC_WAIT (default 60) is how long the probe keeps running after the
 # event, and therefore the largest stall this can report.
 #
@@ -71,6 +76,7 @@ group_reporting=1
 rw=write
 "
 
+compare_populate_locks "${ETCFS_ELASTIC_LOCKS:-0}" "${SURVIVORS[@]}"
 baseline=$(compare_parallel_fio "elastic-baseline" "$RUNTIME" "$LOAD_JOB" "${SURVIVORS[@]}")
 
 # aggregate_mibps <label> — the same sum compare_parallel_fio prints, read back
@@ -91,6 +97,7 @@ compare_parallel_fio "elastic-leave" "$RUNTIME" "$LOAD_JOB" "${SURVIVORS[@]}" >/
 load_pid=$!
 sleep 3
 
+[[ "$COMPARE_BACKEND_BASE" == gfs2 ]] && compare_gfs2_dmesg_mark "${SURVIVORS[@]}"
 T_LEAVE=$(compare_epoch)
 log "removing $JOINER from the filesystem at $T_LEAVE"
 compare_leave_fs "$JOINER"
@@ -99,6 +106,7 @@ compare_probe_stop "$PROBE_NODE"
 wait "$load_pid"
 during_leave=$(aggregate_mibps elastic-leave)
 read -r _ leave_stall leave_errs < <(compare_probe_recovery "$PROBE_NODE" "$T_LEAVE")
+[[ "$COMPARE_BACKEND_BASE" == gfs2 ]] && compare_gfs2_recoveries elasticity-leave "${SURVIVORS[@]}"
 
 # ---- phase 2: the join ----
 compare_probe_start "$PROBE_NODE" "$PROBE_PATH"
@@ -106,6 +114,7 @@ compare_parallel_fio "elastic-join" "$RUNTIME" "$LOAD_JOB" "${SURVIVORS[@]}" >/d
 load_pid=$!
 sleep 3
 
+[[ "$COMPARE_BACKEND_BASE" == gfs2 ]] && compare_gfs2_dmesg_mark "${SURVIVORS[@]}"
 T_JOIN=$(compare_epoch)
 log "putting $JOINER back into the filesystem at $T_JOIN"
 join_s=$(compare_join_fs "$JOINER")
@@ -114,9 +123,12 @@ compare_probe_stop "$PROBE_NODE"
 wait "$load_pid"
 during_join=$(aggregate_mibps elastic-join)
 read -r _ join_stall join_errs < <(compare_probe_recovery "$PROBE_NODE" "$T_JOIN")
+[[ "$COMPARE_BACKEND_BASE" == gfs2 ]] && compare_gfs2_recoveries elasticity-join "${SURVIVORS[@]}"
 
 pct() { awk -v b="$1" -v d="$2" 'BEGIN{ if (b+0 == 0) print "0"; else printf "%.2f", (b-d)/b*100 }'; }
 
+compare_headline elasticity lock_files "${ETCFS_ELASTIC_LOCKS:-0}" files
+[[ "$COMPARE_BACKEND_BASE" == gfs2 ]] && compare_headline elasticity active_locks "$(compare_gfs2_lock_count "$PROBE_NODE")" glocks
 compare_headline elasticity survivor_baseline_mibps "$baseline" MiB/s
 compare_headline elasticity leave_max_stall_s "$leave_stall" s
 compare_headline elasticity leave_failed_ops "$leave_errs" ops

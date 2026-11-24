@@ -95,6 +95,7 @@ EVENTS="$RESULTS_DIR/churn-events.log"
 pace() {  # sleep out the rest of INTERVAL since $1, if any is left
     awk -v s="$1" -v i="$INTERVAL" -v n="$(compare_epoch)" 'BEGIN{d=s+i-n; printf "%.3f", d>0?d:0}'
 }
+[[ "$COMPARE_BACKEND_BASE" == gfs2 ]] && compare_gfs2_dmesg_mark "${SURVIVORS[@]}"
 T_START=$(compare_epoch)
 total_join=0
 for c in $(seq 1 "$CYCLES"); do
@@ -145,6 +146,8 @@ if [[ "$COMPARE_BACKEND_BASE" == "gfs2" ]]; then
     compare_headline "$SCENARIO" dlm_change_s "$changing" s
 fi
 
+[[ "$COMPARE_BACKEND_BASE" == gfs2 ]] && compare_gfs2_recoveries "$SCENARIO" "${SURVIVORS[@]}"
+[[ "$COMPARE_BACKEND_BASE" == gfs2 ]] && compare_headline "$SCENARIO" active_locks "$(compare_gfs2_lock_count "$PROBE_NODE")" glocks
 compare_headline "$SCENARIO" interval_s "$INTERVAL" s
 compare_headline "$SCENARIO" achieved_interval_s \
     "$(awk -v s="$T_START" -v e="$T_END" -v n="$((CYCLES * 2))" 'BEGIN{printf "%.2f", (e-s)/n}')" s

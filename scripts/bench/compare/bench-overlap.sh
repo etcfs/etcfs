@@ -60,6 +60,7 @@ measure() {
     compare_parallel_fio "overlap-$name" "$LOAD_SECS" "$LOAD_JOB" "${SURVIVORS[@]}" >/dev/null &
     local load_pid=$! t0
     sleep 5
+    [[ "$COMPARE_BACKEND_BASE" == gfs2 ]] && compare_gfs2_dmesg_mark "${SURVIVORS[@]}"
     t0=$(compare_epoch)
     log "overlap $name at $t0"
     "$@"
@@ -68,6 +69,7 @@ measure() {
     wait "$load_pid"
     local stall errs
     read -r _ stall errs < <(compare_probe_recovery "$PROBE_NODE" "$t0")
+    if [[ "$COMPARE_BACKEND_BASE" == gfs2 ]]; then compare_gfs2_recoveries "overlap-$name" "${SURVIVORS[@]}"; fi
     compare_headline "overlap-$name" max_stall_s "$stall" s
     compare_headline "overlap-$name" failed_ops "$errs" ops
     compare_headline "overlap-$name" survivor_mibps \

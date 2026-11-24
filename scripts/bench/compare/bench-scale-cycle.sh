@@ -77,13 +77,16 @@ for c in $(seq 1 "$CYCLES"); do
     S="scale-cycle$c"
 
     SCALE_MARKS="$RESULTS_DIR/scale-marks-$c-out.log"; : > "$SCALE_MARKS"
+    [[ "$COMPARE_BACKEND_BASE" == gfs2 ]] && compare_gfs2_dmesg_mark "${BASE[@]}"
     t0=$(compare_epoch)
     "scale_add_${COMPARE_BACKEND}"
     t1=$(compare_epoch)
     scale_report "$S" out_
     compare_headline "$S" survivor_max_stall_out_s "$(max_stall "$t0" "$t1")" s
+    if [[ "$COMPARE_BACKEND" == gfs2 ]]; then compare_gfs2_recoveries "$S-out" "${BASE[@]}"; fi
 
     SCALE_MARKS="$RESULTS_DIR/scale-marks-$c-in.log"; : > "$SCALE_MARKS"
+    [[ "$COMPARE_BACKEND_BASE" == gfs2 ]] && compare_gfs2_dmesg_mark "${BASE[@]}"
     t0=$(compare_epoch)
     if [[ "$COMPARE_BACKEND" == etcfs ]]; then
         # Watched in the background: the key and the arenas go while the
@@ -104,6 +107,7 @@ for c in $(seq 1 "$CYCLES"); do
     t1=$(compare_epoch)
     scale_report "$S" in_
     compare_headline "$S" survivor_max_stall_in_s "$(max_stall "$t0" "$t1")" s
+    if [[ "$COMPARE_BACKEND" == gfs2 ]]; then compare_gfs2_recoveries "$S-in" "${BASE[@]}"; fi
     if [[ "$COMPARE_BACKEND" == etcfs ]]; then
         wait "$watch_pid"
         read -r gone released < "$RESULTS_DIR/scale-gone-$c.txt"

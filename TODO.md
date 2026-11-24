@@ -133,6 +133,9 @@ What the DLM does on a membership change, from the sources in the thesis's
 - The kernel logs each recovery as `dlm_recover <seq> generation <n> done:
   <ms> ms`. Collect it from `dmesg` on every node in every churn benchmark
   below, together with the active-lock count, alongside the survivors' stall.
+  Collected by `compare_gfs2_recoveries` in churn, overlap, elasticity,
+  journal-add and scale-cycle (finished, slowest, sum, started); the format is
+  checked against the 6.18 sources but not yet against AL2's kernel.
 
 ### Membership churn: new benchmarks
 
@@ -153,7 +156,8 @@ What the DLM does on a membership change, from the sources in the thesis's
 - [ ] **Overlapping changes.** Script ready, not yet run: `bench-overlap.sh`
       (four nodes) on both backends.
 - [ ] **Stall versus cluster size.** Run `ETCFS_ELASTIC_NODES=N
-      bench-repeat.sh 5 bench-elasticity.sh` per N. The elasticity table is
+      ETCFS_ELASTIC_LOCKS=100|100000 bench-elasticity.sh` per N; gfs2 runs
+      record `dlm_recover` times and the glock count. The elasticity table is
       three nodes only.
       Repeat the planned join/leave at 3, 6, 10 and 16 nodes (16 is the
       Multi-Attach limit and Red Hat's supported maximum for GFS2) to see

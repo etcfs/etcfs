@@ -746,3 +746,67 @@ compare_probe_recovery() {
 }
 
 source "$COMPARE_SCRIPT_DIR/compare-backends.sh"
+
+# ---- GFS2: the DLM's own record of each membership change ----
+#
+# The kernel logs every lockspace recovery as
+#   dlm: <ls>: dlm_recover <seq> generation <n> done: <ms> ms
+# and that, not the survivors' probe alone, is what says how long the DLM spent
+# rebuilding its directory and remastering. A change that lands inside a
+# recovery interrupts it (recoverd.c logs "dlm_recover <seq>" on entry and the
+# "done" line only on success), so started minus done is the interrupted count.
+#
+# compare_gfs2_dmesg_mark <pub_ip>... — remember where each node's kernel log
+# ends, so the collection below reads only what a scenario caused.
+declare -A COMPARE_DMESG_AT=()
+compare_gfs2_dmesg_mark() {
+    local ip
+    for ip in "$@"; do
+        COMPARE_DMESG_AT[$ip]=$($SSH_CMD "ec2-user@$ip" "sudo dmesg | wc -l")
+    done
+}
+
+# compare_gfs2_recoveries <scenario> <pub_ip>... — headline the recoveries
+# logged since the mark: how many finished, the slowest and the sum of their
+# times over every node, and how many started without finishing.
+compare_gfs2_recoveries() {
+    local scenario="$1" ip raw="$RESULTS_DIR/dlm-recover-$1.log"
+    shift
+    : > "$raw"
+    for ip in "$@"; do
+        $SSH_CMD "ec2-user@$ip" "sudo dmesg | tail -n +$(( ${COMPARE_DMESG_AT[$ip]:-0} + 1 ))" \
+            | grep 'dlm' | sed "s/^/$ip /" >> "$raw" || true
+    done
+    read -r done_n max_ms sum_ms started < <(awk '
+        /dlm_recover [0-9]+$/ { started++ }
+        match($0, /dlm_recover [0-9]+ generation [0-9]+ done: [0-9]+ ms/) {
+            split(substr($0, RSTART, RLENGTH), f, " "); ms = f[6]; n++; s += ms; if (ms > m) m = ms
+        }
+        END { printf "%d %d %d %d\n", n, m, s, started }' "$raw")
+    compare_headline "$scenario" dlm_recoveries_done "$done_n" count
+    compare_headline "$scenario" dlm_recover_max_ms "$max_ms" ms
+    compare_headline "$scenario" dlm_recover_sum_ms "$sum_ms" ms
+    compare_headline "$scenario" dlm_recoveries_started "$started" count
+}
+
+# compare_gfs2_lock_count <pub_ip> — glocks this node holds in its cache, each
+# one a DLM resource the directory rebuild has to account for.
+compare_gfs2_lock_count() {
+    $SSH_CMD "ec2-user@$1" "mountpoint -q /sys/kernel/debug || sudo mount -t debugfs none /sys/kernel/debug;
+        sudo cat /sys/kernel/debug/gfs2/*/glocks 2>/dev/null | grep -c '^G:'" || echo -1
+}
+
+# compare_populate_locks <count> <pub_ip>... — create <count> files once, then
+# stat them all from every named node, so each holds a cached lock on every
+# one. That is the "large number of active resources" the DLM's directory
+# rebuild scales with; on etcfs the same files cost nothing at a membership
+# change, which is the comparison.
+compare_populate_locks() {
+    local count="$1" ip
+    shift
+    [[ "$count" -gt 0 ]] || return 0
+    $SSH_CMD "ec2-user@$1" "sudo mkdir -p $MOUNT_PATH/locks && cd $MOUNT_PATH/locks && seq 1 $count | sudo xargs touch"
+    for ip in "$@"; do
+        $SSH_CMD "ec2-user@$ip" "sudo find $MOUNT_PATH/locks -type f -exec stat -c %i {} + >/dev/null"
+    done
+}
