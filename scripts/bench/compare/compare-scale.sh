@@ -4,12 +4,14 @@
 # an instance, give it the shared volume, run the backend's own join steps.
 # Sourced by bench-scale-cycle.sh after compare-lib.sh.
 #
-# Every step calls scale_mark <step> as it starts, appending "<epoch> <step>" to
-# $SCALE_MARKS, so a step's duration is the gap to the next mark. Each wait is
-# a poll on the condition that step exists to reach — the device appearing,
-# etcd answering /health, the daemon's socket, the mount — never a fixed
-# sleep, so the gaps are the time the system took rather than the time a
-# script chose to wait.
+# Every step appends "<step> <seconds>" to $SCALE_STEPS. A step that runs on a
+# node is timed on that node, inside the one SSH call that performs it: an SSH
+# round trip from here costs about a second, the same order as most of these
+# steps, and timing around it reported a 0.02 s corosync reload as 2.3 s. Only
+# the AWS API steps and the fan-outs that touch several nodes (conf_write,
+# install) are timed from here. Each wait is a poll on the condition the step
+# exists to reach — the device appearing, etcd answering /health, the daemon's
+# socket, the mount — never a fixed sleep.
 #
 # etcfs follows scripts/infra/add-compute-node.sh (etcd `member add`, start
 # etcd as an existing member, start both daemons) and chaos-lib.sh's AWS
@@ -24,37 +26,54 @@
 # corosync.conf and reload. A removed node's journal stays, so the next add
 # reuses it instead of adding another.
 
-SCALE_MARKS=""
-scale_mark() { printf '%s %s\n' "$(date +%s.%N)" "$1" >> "$SCALE_MARKS"; }
+SCALE_STEPS=""
+scale_record() { printf '%s %s\n' "$1" "$2" >> "$SCALE_STEPS"; }
 
-# scale_poll <pub_ip> <seconds> <remote condition> — until the condition holds.
-scale_poll() {
-    local ip="$1" secs="$2" cond="$3"
-    $SSH_CMD "ec2-user@$ip" "deadline=\$((\$(date +%s) + $secs));
-        until $cond; do [ \$(date +%s) -lt \$deadline ] || exit 1; sleep 0.1; done" \
-        || die "scale: '$cond' never held on $ip within ${secs}s"
+# scale_local <step> <command...> — time a step run from this machine.
+scale_local() {
+    local step="$1" s
+    shift
+    s=$(date +%s.%N)
+    "$@"
+    scale_record "$step" "$(awk -v s="$s" -v e="$(date +%s.%N)" 'BEGIN{printf "%.3f", e-s}')"
 }
 
-# scale_report <scenario> <prefix> — one headline per step from $SCALE_MARKS.
+# scale_remote <step> <pub_ip> <command> [<until-condition> [<seconds>]] — run
+# the command on the node, then poll the condition there, timing both on the
+# node's own clock. The command's stdout comes back on this function's stdout.
+scale_remote() {
+    local step="$1" ip="$2" cmd="$3" cond="${4:-true}" secs="${5:-120}" out
+    out=$($SSH_CMD "ec2-user@$ip" "s=\$(date +%s.%N)
+        { $cmd
+        } || exit 1
+        deadline=\$((\$(date +%s) + $secs))
+        until $cond; do [ \$(date +%s) -lt \$deadline ] || exit 2; sleep 0.05; done
+        echo \"@step \$(awk -v s=\$s -v e=\$(date +%s.%N) 'BEGIN{printf \"%.3f\", e-s}')\"") \
+        || die "scale: step $step failed on $ip (command: $cmd; until: $cond)"
+    scale_record "$step" "$(echo "$out" | awk '$1 == "@step" {print $2}')"
+    echo "$out" | grep -v '^@step '
+}
+
+# scale_report <scenario> <prefix> <total_seconds> — one headline per step.
 scale_report() {
-    local scenario="$1" prefix="$2" t step next_t
-    local -a ts steps
-    while read -r t step; do ts+=("$t"); steps+=("$step"); done < "$SCALE_MARKS"
-    for i in "${!steps[@]}"; do
-        [[ "${steps[$i]}" == end ]] && continue
-        next_t="${ts[$((i + 1))]}"
-        compare_headline "$scenario" "${prefix}${steps[$i]}_s" \
-            "$(awk -v s="${ts[$i]}" -v e="$next_t" 'BEGIN{printf "%.3f", e-s}')" s
-    done
-    compare_headline "$scenario" "${prefix}total_s" \
-        "$(awk -v s="${ts[0]}" -v e="${ts[-1]}" 'BEGIN{printf "%.3f", e-s}')" s
+    local scenario="$1" prefix="$2" step secs
+    while read -r step secs; do
+        compare_headline "$scenario" "${prefix}${step}_s" "$secs" s
+    done < "$SCALE_STEPS"
+    compare_headline "$scenario" "${prefix}total_s" "$3" s
 }
 
 # ---- shared: launch an instance and give it the volume ----
 
 SCALE_INST="" SCALE_PUB="" SCALE_PRIV=""
 scale_launch() {
-    scale_mark launch
+    scale_local launch scale_run_instance
+    scale_local ssh wait_for_ssh "$SCALE_PUB" 60 2
+    aws ec2 attach-volume --volume-id "$COMPARE_VOL_ID" --instance-id "$SCALE_INST" --device /dev/sdf >/dev/null
+    scale_remote attach "$SCALE_PUB" true "[ -e /dev/nvme1n1 ] || [ -e /dev/xvdf ]" >/dev/null
+}
+
+scale_run_instance() {
     local n; n=$(( $(state_get compute_ips | jq 'length') + 1 ))
     SCALE_INST=$(aws ec2 run-instances \
         --image-id "$(state_get ami_id | tr -d '"')" --instance-type "$INSTANCE_TYPE" \
@@ -72,18 +91,15 @@ scale_launch() {
     SCALE_PUB=$(get_instance_public_ip "$SCALE_INST")
     state_append compute_ips "\"$SCALE_PRIV\""
     state_append compute_public_ips "\"$SCALE_PUB\""
-
-    scale_mark ssh
-    wait_for_ssh "$SCALE_PUB" 60 2 || die "scale: $SCALE_PUB never answered SSH"
-
-    scale_mark attach
-    aws ec2 attach-volume --volume-id "$COMPARE_VOL_ID" --instance-id "$SCALE_INST" --device /dev/sdf >/dev/null
-    scale_poll "$SCALE_PUB" 120 "[ -e /dev/nvme1n1 ] || [ -e /dev/xvdf ]"
 }
 
 # scale_detach_terminate <instance_id>
 scale_detach_terminate() {
-    scale_mark detach
+    scale_local detach scale_detach "$1"
+    scale_local terminate scale_terminate "$1"
+}
+
+scale_detach() {
     aws ec2 detach-volume --volume-id "$COMPARE_VOL_ID" --instance-id "$1" >/dev/null 2>&1 || true
     # Multi-Attach: the volume stays in use by the others, so wait for this
     # instance's attachment to disappear rather than for the volume to free.
@@ -93,10 +109,11 @@ scale_detach_terminate() {
         [[ $SECONDS -lt $deadline ]] || { log "WARNING: $1 still attached after 120s"; break; }
         sleep 1
     done
-    scale_mark terminate
+}
+
+scale_terminate() {
     aws ec2 terminate-instances --instance-ids "$1" >/dev/null
     aws ec2 wait instance-terminated --instance-ids "$1"
-    scale_mark end
 }
 
 # ---- etcfs ----
@@ -111,8 +128,12 @@ SCALE_ETCFS_N=0
 scale_etcfs_prepare() {
     SCALE_BIN_DIR="$RESULTS_DIR/scale-bin"
     mkdir -p "$SCALE_BIN_DIR"
-    scp $SSH_OPTS -q "ec2-user@${COMPARE_PUB_IPS[0]}:/usr/local/bin/{etcfuse,etcfuse-meta,etcd,etcdctl}" "$SCALE_BIN_DIR/" \
-        || die "scale: could not copy binaries off ${COMPARE_PUB_IPS[0]}"
+    local b
+    # One file per scp: the SFTP-based scp does not expand {a,b} in a remote path.
+    for b in etcfuse etcfuse-meta etcd etcdctl; do
+        scp $SSH_OPTS -q "ec2-user@${COMPARE_PUB_IPS[0]}:/usr/local/bin/$b" "$SCALE_BIN_DIR/" \
+            || die "scale: could not copy $b off ${COMPARE_PUB_IPS[0]}"
+    done
 }
 
 scale_add_etcfs() {
@@ -124,57 +145,56 @@ scale_add_etcfs() {
 
     scale_launch
 
-    scale_mark install
-    $SSH_CMD "ec2-user@$SCALE_PUB" "sudo dnf install -y fuse3-libs >/dev/null 2>&1; sudo mkdir -p /mnt/etcfuse /run/etcfuse /var/lib/etcd /var/lib/etcd-wal"
-    scp $SSH_OPTS -q "$SCALE_BIN_DIR"/* "ec2-user@$SCALE_PUB:/tmp/"
-    $SSH_CMD "ec2-user@$SCALE_PUB" "sudo install -m 0755 /tmp/etcfuse /tmp/etcfuse-meta /tmp/etcd /tmp/etcdctl /usr/local/bin/"
+    scale_local install scale_etcfs_install
 
-    scale_mark member_add
-    out=$($SSH_CMD "ec2-user@$seed" "$ETCDCTL member add $SCALE_ENAME --peer-urls=http://$SCALE_PRIV:2380") \
-        || die "scale: member add failed: $out"
+    # Through a file, not $(...): a subshell would drop the step's timing record.
+    scale_remote member_add "$seed" "$ETCDCTL member add $SCALE_ENAME --peer-urls=http://$SCALE_PRIV:2380" \
+        > "$RESULTS_DIR/scale-member-add.out"
+    out=$(cat "$RESULTS_DIR/scale-member-add.out")
     initial=$(echo "$out" | sed -nE 's/^ETCD_INITIAL_CLUSTER="?([^"]*)"?$/\1/p')
     [[ -n "$initial" ]] || die "scale: no ETCD_INITIAL_CLUSTER in: $out"
 
-    scale_mark etcd_start
-    $SSH_CMD "ec2-user@$SCALE_PUB" "sudo nohup /usr/local/bin/etcd --name $SCALE_ENAME --data-dir /var/lib/etcd \
+    scale_remote etcd_start "$SCALE_PUB" "sudo nohup /usr/local/bin/etcd --name $SCALE_ENAME --data-dir /var/lib/etcd \
         --wal-dir /var/lib/etcd-wal \
         --listen-client-urls http://0.0.0.0:2379 --advertise-client-urls http://$SCALE_PRIV:2379 \
         --listen-peer-urls http://0.0.0.0:2380 --initial-advertise-peer-urls http://$SCALE_PRIV:2380 \
         --initial-cluster '$initial' --initial-cluster-state existing \
         --auto-compaction-mode revision --auto-compaction-retention 100000 \
-        --quota-backend-bytes 8589934592 > /tmp/etcd.log 2>&1 &"
-    scale_poll "$SCALE_PUB" 120 "curl -sf -m 1 http://127.0.0.1:2379/health >/dev/null"
+        --quota-backend-bytes 8589934592 > /tmp/etcd.log 2>&1 &" \
+        "curl -sf -m 1 http://127.0.0.1:2379/health >/dev/null" >/dev/null
 
-    scale_mark meta_start
     endpoints=""
     while read -r p; do endpoints+="${endpoints:+,}http://$p:2379"; done \
         < <($SSH_CMD "ec2-user@$seed" "$ETCDCTL member list" | awk -F', ' '{print $5}' | sed -E 's#http://([0-9.]+):2379#\1#')
-    $SSH_CMD "ec2-user@$SCALE_PUB" "sudo nohup /usr/local/bin/etcfuse-meta --listen=/run/etcfuse/etcfuse.sock \
+    scale_remote meta_start "$SCALE_PUB" "sudo nohup /usr/local/bin/etcfuse-meta --listen=/run/etcfuse/etcfuse.sock \
         --etcd-endpoints=$endpoints --node-id=$SCALE_NODE_ID --cluster-name=$cluster \
         --lease-ttl=${ETCFS_LEASE_TTL:-10s} --block-device=/dev/nvme1n1 --log-level=1 \
-        --ebs-volume-id=$COMPARE_VOL_ID --ec2-instance-id=$SCALE_INST > /tmp/meta.log 2>&1 &"
-    scale_poll "$SCALE_PUB" 60 "sudo test -S /run/etcfuse/etcfuse.sock"
+        --ebs-volume-id=$COMPARE_VOL_ID --ec2-instance-id=$SCALE_INST > /tmp/meta.log 2>&1 &" \
+        "sudo test -S /run/etcfuse/etcfuse.sock" 60 >/dev/null
 
-    scale_mark fuse_start
-    $SSH_CMD "ec2-user@$SCALE_PUB" "sudo nohup /usr/local/bin/etcfuse --socket=/run/etcfuse/etcfuse.sock \
-        --node-id=$SCALE_NODE_ID --log-level=1 /mnt/etcfuse > /tmp/fuse.log 2>&1 &"
-    scale_poll "$SCALE_PUB" 60 "sudo mountpoint -q /mnt/etcfuse"
+    scale_remote fuse_start "$SCALE_PUB" "sudo nohup /usr/local/bin/etcfuse --socket=/run/etcfuse/etcfuse.sock \
+        --node-id=$SCALE_NODE_ID --log-level=1 /mnt/etcfuse > /tmp/fuse.log 2>&1 &" \
+        "sudo mountpoint -q /mnt/etcfuse" 60 >/dev/null
 
     # Arena claim is lazy, so the first write is where this node takes one.
-    scale_mark first_write
-    scale_poll "$SCALE_PUB" 60 "sudo dd if=/dev/zero of=/mnt/etcfuse/scale-first-$SCALE_ETCFS_N bs=4k count=1 oflag=direct >/dev/null 2>&1"
-    scale_mark end
+    scale_remote first_write "$SCALE_PUB" true \
+        "sudo dd if=/dev/zero of=/mnt/etcfuse/scale-first-$SCALE_ETCFS_N bs=4k count=1 oflag=direct >/dev/null 2>&1" 60 >/dev/null
+}
+
+scale_etcfs_install() {
+    $SSH_CMD "ec2-user@$SCALE_PUB" "sudo dnf install -y fuse3-libs >/dev/null 2>&1; sudo mkdir -p /mnt/etcfuse /run/etcfuse /var/lib/etcd /var/lib/etcd-wal"
+    scp $SSH_OPTS -q "$SCALE_BIN_DIR"/* "ec2-user@$SCALE_PUB:/tmp/"
+    $SSH_CMD "ec2-user@$SCALE_PUB" "sudo install -m 0755 /tmp/etcfuse /tmp/etcfuse-meta /tmp/etcd /tmp/etcdctl /usr/local/bin/"
 }
 
 scale_remove_etcfs() {
     local seed="${COMPARE_PUB_IPS[0]}" memberid
-    scale_mark leave
-    $SSH_CMD "ec2-user@$SCALE_PUB" "sudo fusermount -u /mnt/etcfuse 2>/dev/null; sudo pkill -TERM etcfuse-meta 2>/dev/null; true"
-    scale_poll "$SCALE_PUB" 60 "! pgrep -x etcfuse-meta >/dev/null"
+    scale_remote leave "$SCALE_PUB" "sudo fusermount -u /mnt/etcfuse 2>/dev/null; sudo pkill -TERM etcfuse-meta 2>/dev/null; true" \
+        "! pgrep -x etcfuse-meta >/dev/null" 60 >/dev/null
 
-    scale_mark member_remove
     memberid=$($SSH_CMD "ec2-user@$seed" "$ETCDCTL member list" | awk -F', ' -v n="$SCALE_ENAME" '$3 == n {print $1}')
-    [[ -z "$memberid" ]] || $SSH_CMD "ec2-user@$seed" "$ETCDCTL member remove $memberid" >/dev/null
+    [[ -n "$memberid" ]] || die "scale: no etcd member named $SCALE_ENAME"
+    scale_remote member_remove "$seed" "$ETCDCTL member remove $memberid >/dev/null"
 
     scale_detach_terminate "$SCALE_INST"
 }
@@ -207,54 +227,34 @@ scale_add_gfs2() {
     local member="${COMPARE_PUB_IPS[0]}" n
     scale_launch
 
-    scale_mark install
-    $SSH_CMD "ec2-user@$SCALE_PUB" "sudo yum install -y corosync dlm gfs2-utils >/dev/null 2>&1 && sudo mkdir -p $MOUNT_PATH" \
-        || die "scale: gfs2 packages failed to install on $SCALE_PUB"
+    scale_local install $SSH_CMD "ec2-user@$SCALE_PUB" "sudo yum install -y corosync dlm gfs2-utils >/dev/null 2>&1 && sudo mkdir -p $MOUNT_PATH"
 
-    scale_mark conf_write
     SCALE_GFS2_MEMBERS+=("$SCALE_PRIV")
-    scale_gfs2_reconfigure "${COMPARE_PUB_IPS[@]}" "$SCALE_PUB"
-
-    scale_mark corosync_reload
-    $SSH_CMD "ec2-user@$member" "sudo corosync-cfgtool -R >/dev/null"
-
-    scale_mark corosync_join
     n=${#SCALE_GFS2_MEMBERS[@]}
-    $SSH_CMD "ec2-user@$SCALE_PUB" "sudo systemctl start corosync"
-    scale_poll "$member" 120 "[ \"\$(sudo corosync-quorumtool -s 2>/dev/null | awk '/^Nodes:/{print \$2}')\" = $n ]"
-
-    scale_mark dlm_start
-    $SSH_CMD "ec2-user@$SCALE_PUB" "sudo systemctl start dlm"
-    scale_poll "$SCALE_PUB" 60 "sudo dlm_tool status >/dev/null 2>&1"
-
+    scale_local conf_write scale_gfs2_reconfigure "${COMPARE_PUB_IPS[@]}" "$SCALE_PUB"
+    scale_remote corosync_reload "$member" "sudo corosync-cfgtool -R >/dev/null" >/dev/null
+    # Counted from the new node's own view of the membership.
+    scale_remote corosync_join "$SCALE_PUB" "sudo systemctl start corosync" \
+        "[ \"\$(sudo corosync-quorumtool -s 2>/dev/null | awk '/^Nodes:/{print \$2}')\" = $n ]" >/dev/null
+    scale_remote dlm_start "$SCALE_PUB" "sudo systemctl start dlm" "sudo dlm_tool status >/dev/null 2>&1" 60 >/dev/null
     if [[ "$n" -gt "$SCALE_GFS2_JOURNALS" ]]; then
-        scale_mark jadd
-        $SSH_CMD "ec2-user@$member" "sudo gfs2_jadd -j 1 $MOUNT_PATH >/dev/null" || die "scale: gfs2_jadd failed"
+        scale_remote jadd "$member" "sudo gfs2_jadd -j 1 $MOUNT_PATH >/dev/null" >/dev/null
         SCALE_GFS2_JOURNALS=$((SCALE_GFS2_JOURNALS + 1))
     fi
-
-    scale_mark mount
-    $SSH_CMD "ec2-user@$SCALE_PUB" "$COMPARE_REMOTE_MOUNT_CMD" || die "scale: gfs2 mount failed on $SCALE_PUB"
-
-    scale_mark first_write
-    scale_poll "$SCALE_PUB" 60 "sudo dd if=/dev/zero of=$MOUNT_PATH/scale-first-\$\$ bs=4k count=1 oflag=direct >/dev/null 2>&1"
-    scale_mark end
+    scale_remote mount "$SCALE_PUB" "$COMPARE_REMOTE_MOUNT_CMD" >/dev/null
+    scale_remote first_write "$SCALE_PUB" true \
+        "sudo dd if=/dev/zero of=$MOUNT_PATH/scale-first-\$\$ bs=4k count=1 oflag=direct >/dev/null 2>&1" 60 >/dev/null
 }
 
 scale_remove_gfs2() {
     local member="${COMPARE_PUB_IPS[0]}" ip keep=()
-    scale_mark leave
-    $SSH_CMD "ec2-user@$SCALE_PUB" "sudo umount $MOUNT_PATH && sudo systemctl stop dlm && sudo systemctl stop corosync" \
-        || die "scale: clean gfs2 leave failed on $SCALE_PUB"
+    scale_remote leave "$SCALE_PUB" "sudo umount $MOUNT_PATH && sudo systemctl stop dlm && sudo systemctl stop corosync" >/dev/null
 
-    scale_mark conf_write
     for ip in "${SCALE_GFS2_MEMBERS[@]}"; do [[ "$ip" == "$SCALE_PRIV" ]] || keep+=("$ip"); done
     SCALE_GFS2_MEMBERS=("${keep[@]}")
-    scale_gfs2_reconfigure "${COMPARE_PUB_IPS[@]}"
-
-    scale_mark corosync_reload
-    $SSH_CMD "ec2-user@$member" "sudo corosync-cfgtool -R >/dev/null"
-    scale_poll "$member" 60 "[ \"\$(sudo corosync-quorumtool -s 2>/dev/null | awk '/^Nodes:/{print \$2}')\" = ${#SCALE_GFS2_MEMBERS[@]} ]"
+    scale_local conf_write scale_gfs2_reconfigure "${COMPARE_PUB_IPS[@]}"
+    scale_remote corosync_reload "$member" "sudo corosync-cfgtool -R >/dev/null" \
+        "[ \"\$(sudo corosync-quorumtool -s 2>/dev/null | awk '/^Nodes:/{print \$2}')\" = ${#SCALE_GFS2_MEMBERS[@]} ]" 60 >/dev/null
 
     scale_detach_terminate "$SCALE_INST"
 }

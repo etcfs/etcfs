@@ -43,7 +43,7 @@ WAIT="${ETCFS_SCALE_WAIT:-120}"
 compare_client_nodes 3
 compare_begin
 compare_mount
-rm -f "$RESULTS_DIR"/scale-*.json "$RESULTS_DIR"/scale-marks-*.log
+rm -f "$RESULTS_DIR"/scale-*.json "$RESULTS_DIR"/scale-steps-*.log
 BASE=("${BENCH_NODES[@]}")
 PROBE_NODE="${BASE[0]}"
 "scale_${COMPARE_BACKEND}_prepare"
@@ -76,16 +76,16 @@ sleep 5
 for c in $(seq 1 "$CYCLES"); do
     S="scale-cycle$c"
 
-    SCALE_MARKS="$RESULTS_DIR/scale-marks-$c-out.log"; : > "$SCALE_MARKS"
+    SCALE_STEPS="$RESULTS_DIR/scale-steps-$c-out.log"; : > "$SCALE_STEPS"
     [[ "$COMPARE_BACKEND_BASE" == gfs2 ]] && compare_gfs2_dmesg_mark "${BASE[@]}"
     t0=$(compare_epoch)
     "scale_add_${COMPARE_BACKEND}"
     t1=$(compare_epoch)
-    scale_report "$S" out_
+    scale_report "$S" out_ "$(awk -v s="$t0" -v e="$t1" 'BEGIN{printf "%.3f", e-s}')"
     compare_headline "$S" survivor_max_stall_out_s "$(max_stall "$t0" "$t1")" s
     if [[ "$COMPARE_BACKEND" == gfs2 ]]; then compare_gfs2_recoveries "$S-out" "${BASE[@]}"; fi
 
-    SCALE_MARKS="$RESULTS_DIR/scale-marks-$c-in.log"; : > "$SCALE_MARKS"
+    SCALE_STEPS="$RESULTS_DIR/scale-steps-$c-in.log"; : > "$SCALE_STEPS"
     [[ "$COMPARE_BACKEND_BASE" == gfs2 ]] && compare_gfs2_dmesg_mark "${BASE[@]}"
     t0=$(compare_epoch)
     if [[ "$COMPARE_BACKEND" == etcfs ]]; then
@@ -105,7 +105,7 @@ for c in $(seq 1 "$CYCLES"); do
     fi
     "scale_remove_${COMPARE_BACKEND}"
     t1=$(compare_epoch)
-    scale_report "$S" in_
+    scale_report "$S" in_ "$(awk -v s="$t0" -v e="$t1" 'BEGIN{printf "%.3f", e-s}')"
     compare_headline "$S" survivor_max_stall_in_s "$(max_stall "$t0" "$t1")" s
     if [[ "$COMPARE_BACKEND" == gfs2 ]]; then compare_gfs2_recoveries "$S-in" "${BASE[@]}"; fi
     if [[ "$COMPARE_BACKEND" == etcfs ]]; then
