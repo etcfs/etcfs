@@ -50,6 +50,11 @@ PROBE_NODE="${SURVIVORS[0]}"
 PROBE_PATH="$MOUNT_PATH/jadd-probe.dat"
 log "journals=$COMPARE_GFS2_JOURNALS joiner=$JOINER survivors=${SURVIVORS[*]}"
 
+# The joiner must have the shared device before its refusal means anything:
+# an attachment that did not land at provisioning fails the mount for that
+# reason instead, which once passed this check and failed the admission later.
+compare_reattach_volume_if_missing "$JOINER"
+
 # The refusal itself, recorded rather than assumed.
 refused=0
 if ! $SSH_CMD "ec2-user@$JOINER" "sudo mkdir -p $MOUNT_PATH && timeout 60 $COMPARE_REMOTE_MOUNT_CMD" \
