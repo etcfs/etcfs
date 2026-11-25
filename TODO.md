@@ -8,6 +8,17 @@ EtcFS wins and loses.
 
 ## Next steps, ranked
 
+**0. Bug: a fast rejoin gets ENOSPC on the block device.** `bench-churn.sh` on
+etcfs at `ETCFS_CHURN_INTERVAL=5` and `=2` failed 4/4 runs (level-2, 2026-11-25):
+the churner's first rejoin never answers a write, and its etcfuse-meta logs
+`write: block device write failed ... no space left on device` in a loop. At
+10 s and above it passes. The 20 GB volume holds only ~2 GB of fio files, so
+the volume is not full: suspect the arena or space accounting when a node
+leaves and rejoins within seconds (an offset past the device end, or arenas
+not reusable yet). Evidence in `benchmark-results/level2/reruns.log`. It touches
+allocator invariants, so reproduce on docker first and design the fix before
+patching.
+
 **1. Decide the Terraform misconfiguration findings.** Scanning is in place and
 reports 21, none of them silenced. They need answers rather than patches:
 encryption at rest on the shared volume and the root devices is the one that
