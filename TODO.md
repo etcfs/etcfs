@@ -19,6 +19,18 @@ not reusable yet). Evidence in `benchmark-results/level2/reruns.log`. It touches
 allocator invariants, so reproduce on docker first and design the fix before
 patching.
 
+**0b. GFS2 mount hang at 8–10 nodes, and the lock-count limits.** In level-2's
+sweep a node's *initial* mount (before any lock is populated) sat in
+`dlm_new_lockspace` with the cluster quorate in 4 of 8 GFS2 setups at 8–10
+nodes (n8: 1/4, n10: 3/4; none at 6 or below; trace in
+`benchmark-results/level2/hung-mount-n8.txt`). The lock count is therefore not
+the trigger. First rule out the harness — `compare_mount_gfs2` starts dlm on
+every node, sleeps 5 s, then mounts nodes one after another — by checking
+`dlm_tool ls`/`dlm_controld` logs on a hung node; then decide whether it is a
+DLM scaling limit of the bare (unfenced) stack. Separately, bisect the lock
+count on both backends until recovery degrades, so the thesis can state GFS2's
+and EtcFS's lock limits side by side.
+
 **1. Decide the Terraform misconfiguration findings.** Scanning is in place and
 reports 21, none of them silenced. They need answers rather than patches:
 encryption at rest on the shared volume and the root devices is the one that
