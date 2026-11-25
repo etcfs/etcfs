@@ -537,7 +537,10 @@ $probe" ;;
         die "gfs2-fenced: the fence device never started — see $RESULTS_DIR/stonith-start-failure.txt"
     fi
 
-    dev=$(compare_shared_device "$n0")
+    # Same boot-time attachment gap as the bare stack: every node needs the
+    # device before pacemaker starts the clone on it.
+    for ip in "${COMPARE_PUB_IPS[@]}"; do compare_reattach_volume_if_missing "$ip"; done
+    dev="$(compare_shared_dev_path)"
     # GFS2 straight on the shared device, not on a clustered LVM volume: that
     # is what every other GFS2 run in this suite measures, and the fenced
     # variant exists to change one thing — whether a dead node is fenced — not
