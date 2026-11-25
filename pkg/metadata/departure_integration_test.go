@@ -96,3 +96,45 @@ func TestIntegration_LeaveAnnouncesDepartureAfterReleasingArenas(t *testing.T) {
 		t.Error("the departure did not take the node out of membership")
 	}
 }
+
+// The daemon's real shutdown order: SIGTERM cancels the context Run is
+// heartbeating under, and Leave runs after Run has returned.  Run must not end
+// the lease on the way out, or the membership key is already gone when Leave
+// tries to delete it together with the marker, and peers fence a node that
+// left cleanly.
+func TestIntegration_LeaveAfterRunCancelledAnnouncesDeparture(t *testing.T) {
+	cli := etcdtest.Client(t)
+	store := NewStore(cli, "shutdown-node")
+	mem := NewMembership(cli, "shutdown-node", "test-cluster", 10*time.Second)
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { mem.Run(runCtx); close(done) }()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if v, err := store.Get(context.Background(), MembershipKey("shutdown-node")); err == nil && v != nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the node never registered")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancel()
+	<-done
+
+	ctx := context.Background()
+	if _, err := mem.Leave(ctx, store); err != nil {
+		t.Fatalf("leave: %v", err)
+	}
+	departed, err := store.HasDeparted(ctx, "shutdown-node")
+	if err != nil {
+		t.Fatalf("read marker: %v", err)
+	}
+	if !departed {
+		t.Error("a graceful shutdown was not announced, so peers will fence it")
+	}
+	if alive, _ := store.Get(ctx, MembershipKey("shutdown-node")); alive != nil {
+		t.Error("the node is still a member after leaving")
+	}
+}

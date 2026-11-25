@@ -78,7 +78,8 @@ func (m *Membership) SetInstanceID(id string) {
 	m.instanceID = id
 }
 
-// Run starts the membership heartbeat loop.  Blocks until ctx is cancelled.
+// Run starts the membership heartbeat loop.  Blocks until ctx is cancelled,
+// and leaves the lease in place when it returns: Leave ends it.
 func (m *Membership) Run(ctx context.Context) {
 	// Grant a lease and register
 	leaseID, err := m.grantAndRegister(ctx)
@@ -103,7 +104,12 @@ func (m *Membership) Run(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			m.revokeLease(context.Background())
+			// Not revoked here.  Cancellation is the start of shutdown, and
+			// Leave runs after it: revoking now deleted the membership key
+			// before Leave could delete it together with the departure
+			// marker, so every graceful shutdown reached peers as a crash and
+			// was fenced.  Leave revokes; a process that dies before getting
+			// there is left to the lease TTL and fenced, as a crash should be.
 			return
 		case resp, ok := <-keepCh:
 			if !ok {
