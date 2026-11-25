@@ -82,8 +82,9 @@ compare_mount_nfs() {
 }
 
 # compare_mount_efs — an EFS file system in elastic throughput mode, the managed
-# alternative a cloud user would pick instead of a shared block device. Elastic,
-# not bursting: a new file system's bursting baseline scales with how little it
+# alternative a cloud user would pick instead of a shared block device. Elastic
+# by default (provisioned with ETCFS_EFS_PROVISIONED_MIBPS), never bursting: a
+# new file system's bursting baseline scales with how little it
 # stores and spends credits, so consecutive runs would measure the credit
 # balance. The ID is written to state before the mount target is made, because
 # destroy-infra.sh deletes whatever bench_efs_id names and a failure between the
@@ -92,8 +93,13 @@ compare_mount_efs() {
     local mount_all="$1" sg subnet efs_id mt_out mt_state mt_ip ip deadline
     sg=$(state_get sg_id | tr -d '"')
     subnet=$(state_get subnet_id | tr -d '"')
+    # ETCFS_EFS_PROVISIONED_MIBPS switches to provisioned throughput at that
+    # rate, the mode a user pays for to stop depending on elastic scaling.
+    local tp=(--throughput-mode elastic)
+    [[ -n "${ETCFS_EFS_PROVISIONED_MIBPS:-}" ]] && \
+        tp=(--throughput-mode provisioned --provisioned-throughput-in-mibps "$ETCFS_EFS_PROVISIONED_MIBPS")
     efs_id=$(aws efs create-file-system --performance-mode generalPurpose \
-        --throughput-mode elastic \
+        "${tp[@]}" \
         --tags "Key=ClusterName,Value=$CLUSTER_NAME" "Key=Name,Value=${CLUSTER_NAME}-efs" \
         --query 'FileSystemId' --output text) || die "compare_mount_efs: create-file-system failed"
     state_put bench_efs_id "\"$efs_id\""
