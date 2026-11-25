@@ -129,6 +129,9 @@ pct() { awk -v b="$1" -v d="$2" 'BEGIN{ if (b+0 == 0) print "0"; else printf "%.
 
 compare_headline elasticity lock_files "${ETCFS_ELASTIC_LOCKS:-0}" files
 [[ "$COMPARE_BACKEND_BASE" == gfs2 ]] && compare_headline elasticity active_locks "$(compare_gfs2_lock_count "$PROBE_NODE")" glocks
+# etcfs's counterpart: the inode lock keys held in etcd, cluster-wide.
+[[ "$COMPARE_BACKEND_BASE" == etcfs ]] && compare_headline elasticity active_locks \
+    "$($SSH_CMD "ec2-user@$PROBE_NODE" "sudo ETCDCTL_API=3 /usr/local/bin/etcdctl --endpoints=http://127.0.0.1:2379 get --prefix lock: --count-only -w json" | jq '.count // 0')" keys
 compare_headline elasticity survivor_baseline_mibps "$baseline" MiB/s
 compare_headline elasticity leave_max_stall_s "$leave_stall" s
 compare_headline elasticity leave_failed_ops "$leave_errs" ops
