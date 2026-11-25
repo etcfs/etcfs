@@ -727,6 +727,10 @@ compare_leave_fs() {
                  # A rejoin started while the old daemon is still releasing its
                  # arenas races its exit, which unlinks the new daemon's socket.
                  for _ in \$(seq 600); do pgrep -x etcfuse-meta >/dev/null || break; sleep 0.1; done; true"
+            # Whether the departure was announced decides whether peers fence
+            # this node; the daemon says which, and nothing else records it.
+            $SSH_CMD "ec2-user@$ip" "sudo grep -iE 'membership|depart|arena|fenc' /tmp/meta.log | tail -5" \
+                | sed "s/^/  [$ip leave] /" >&2 || true
             ;;
         juicefs)
             $SSH_CMD "ec2-user@$ip" "sudo umount $MOUNT_PATH 2>/dev/null || sudo umount -l $MOUNT_PATH 2>/dev/null; true"
