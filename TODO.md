@@ -8,16 +8,14 @@ EtcFS wins and loses.
 
 ## Next steps, ranked
 
-**0. Bug: a fast rejoin gets ENOSPC on the block device.** `bench-churn.sh` on
-etcfs at `ETCFS_CHURN_INTERVAL=5` and `=2` failed 4/4 runs (level-2, 2026-11-25):
-the churner's first rejoin never answers a write, and its etcfuse-meta logs
-`write: block device write failed ... no space left on device` in a loop. At
-10 s and above it passes. The 20 GB volume holds only ~2 GB of fio files, so
-the volume is not full: suspect the arena or space accounting when a node
-leaves and rejoins within seconds (an offset past the device end, or arenas
-not reusable yet). Evidence in `benchmark-results/level2/reruns.log`. It touches
-allocator invariants, so reproduce on docker first and design the fix before
-patching.
+**0. Rerun the EtcFS clean-leave benchmarks after the fencing fix.** Every
+graceful shutdown used to be fenced: `Membership.Run` revoked its lease on
+SIGTERM, so `Leave` could no longer write the departure marker and peers
+force-detached the volume (18 CloudTrail detaches in two 10 s churn runs; at
+5 s and 2 s the rejoin opened a device mid-detach and got ENOSPC). Fixed with an
+integration test; level-2 EtcFS elasticity, churn, overlap and scale-cycle
+numbers measured fenced leaves and must be rerun. Plan in
+`benchmark-results/level2/NEXT-RUNS.md` (section D).
 
 **0b. GFS2 mount hang at 8–10 nodes, and the lock-count limits.** In level-2's
 sweep a node's *initial* mount (before any lock is populated) sat in
