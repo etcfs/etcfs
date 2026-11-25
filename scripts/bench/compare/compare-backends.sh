@@ -758,7 +758,9 @@ compare_join_fs() {
         return
     fi
     [[ -n "${COMPARE_REMOTE_MOUNT_CMD:-}" ]] || die "compare_join_fs: no mount command recorded for $COMPARE_BACKEND"
-    $SSH_CMD "ec2-user@$ip" "
+    # The limit sits on the local ssh: a gfs2 mount stuck in dlm_new_lockspace
+    # is in uninterruptible sleep, so a timeout on the node could never end it.
+    timeout 420 $SSH_CMD "ec2-user@$ip" "
         s=\$(date +%s.%N)
         $COMPARE_REMOTE_MOUNT_CMD >/dev/null 2>&1
         deadline=\$((\$(date +%s) + 120))
@@ -770,7 +772,7 @@ compare_join_fs() {
         sudo rm -f $MOUNT_PATH/join-probe.* 2>/dev/null
         e=\$(date +%s.%N)
         awk -v s=\$s -v e=\$e 'BEGIN{printf \"%.3f\", e-s}'
-    " || die "compare_join_fs: $ip never produced a working mount"
+    " || die "compare_join_fs: $ip never produced a working mount (a hung mount ends after 420s)"
 }
 
 # ---- node failure ----
