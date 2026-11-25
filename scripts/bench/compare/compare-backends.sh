@@ -353,7 +353,10 @@ compare_mount_gfs2() {
     $SSH_CMD "ec2-user@${COMPARE_PUB_IPS[0]}" \
         "sudo mkfs.gfs2 -O -p lock_dlm -t comparegfs2:vol1 -j $journals $dev"
     for ip in "${COMPARE_PUB_IPS[@]:0:$journals}"; do
-        $SSH_CMD "ec2-user@$ip" "sudo mkdir -p /mnt/compare-gfs2 && sudo mount -t gfs2 -o noatime $dev /mnt/compare-gfs2"
+        # Bounded: at eight nodes a DLM lockspace join was seen to hang in
+        # new_lockspace for hours, which would otherwise stall the whole run.
+        timeout 300 $SSH_CMD "ec2-user@$ip" "sudo mkdir -p /mnt/compare-gfs2 && sudo mount -t gfs2 -o noatime $dev /mnt/compare-gfs2" \
+            || die "gfs2: mount on $ip failed or hung past 300s"
     done
     MOUNT_PATH=/mnt/compare-gfs2
     COMPARE_REMOTE_MOUNT_CMD="sudo mount -t gfs2 -o noatime $dev /mnt/compare-gfs2"
