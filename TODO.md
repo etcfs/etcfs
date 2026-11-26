@@ -8,21 +8,14 @@ EtcFS wins and loses.
 
 ## Next steps, ranked
 
-**0. Rerun the EtcFS clean-leave benchmarks after the fencing fix.** Every
-graceful shutdown used to be fenced: `Membership.Run` revoked its lease on
-SIGTERM, so `Leave` could no longer write the departure marker and peers
-force-detached the volume (18 CloudTrail detaches in two 10 s churn runs; at
-5 s and 2 s the rejoin opened a device mid-detach and got ENOSPC). Fixed with an
-integration test; level-2 EtcFS elasticity, churn, overlap and scale-cycle
-numbers measured fenced leaves and must be rerun. Plan in
-`benchmark-results/level2/NEXT-RUNS.md` (section D).
-
-**0b. GFS2 mount hang at 8–10 nodes, and the lock-count limits.** In level-2's
+**0. GFS2 mount hang at 8–10 nodes, and the lock-count limits.** In level-2's
 sweep a node's *initial* mount (before any lock is populated) sat in
 `dlm_new_lockspace` with the cluster quorate in 4 of 8 GFS2 setups at 8–10
 nodes (n8: 1/4, n10: 3/4; none at 6 or below; trace in
-`benchmark-results/level2/hung-mount-n8.txt`). The lock count is therefore not
-the trigger. First rule out the harness — `compare_mount_gfs2` starts dlm on
+`benchmark-results/level2/hung-mount-n8.txt`). Level 3 hung in 3 of 3 attempts
+at 10 nodes with only 100 locks: twice on the initial mount, once on a rejoin
+after a clean leave (`benchmark-results/level3/hung-rejoin-gfs2-n10.txt`); the
+two 8-node 100k-lock runs mounted. The lock count is therefore not the trigger. First rule out the harness — `compare_mount_gfs2` starts dlm on
 every node, sleeps 5 s, then mounts nodes one after another — by checking
 `dlm_tool ls`/`dlm_controld` logs on a hung node; then decide whether it is a
 DLM scaling limit of the bare (unfenced) stack. Separately, bisect the lock
