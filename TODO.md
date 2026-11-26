@@ -8,6 +8,22 @@ EtcFS wins and loses.
 
 ## Next steps, ranked
 
+**0a. Writer starvation: a polling reader on another node makes a write fail
+with EAGAIN.** Seen once in level-3's EtcFS coherence run (writer `pwrite`,
+`BlockingIOError: [Errno 11]`); reproduced on the docker cluster in 2 of 15
+trials (node 2 `preadv`s block 0 every 50 ms, node 1's `pwrite` waits 9.3–10 s
+and fails). Cause: the recall yields the reader's key, but its next read
+re-acquires a shared key at once — `AcquireLock` checks only holders, not
+`lock_want:` keys — while the writer's `retryDelay` grows by ~40 ms per attempt,
+so the writer keeps missing the free window until `contendedAttempts` runs out.
+Fixes, strongest first:
+- readers defer to wants: an acquisition also fails while another node's want
+  key exists for the inode (writer preference, atomic in etcd); want keys then
+  need a lease so a dead waiter cannot block readers, and a TLA+ check;
+- the yielder backs off: after a recall, the node does not re-acquire that
+  inode while the peer's want key exists (node-local, capped);
+- the writer retries faster: cap its retry delay at ~20 ms (mitigation only).
+
 **0. GFS2 mount hang at 8–10 nodes, and the lock-count limits.** In level-2's
 sweep a node's *initial* mount (before any lock is populated) sat in
 `dlm_new_lockspace` with the cluster quorate in 4 of 8 GFS2 setups at 8–10
